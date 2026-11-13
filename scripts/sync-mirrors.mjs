@@ -182,9 +182,20 @@ async function isAncestor(repoRoot, older, newer) {
   return null
 }
 
+/** 两个 commit 的树是否完全相同（内容一致、仅历史不同）。对象缺失返回 null。 */
+async function sameTree(repoRoot, a, b) {
+  if (!(await commitExists(repoRoot, a)) || !(await commitExists(repoRoot, b))) return null
+  const left = (await git(repoRoot, ['rev-parse', '--verify', '--quiet', `${a}^{tree}`], { allowFail: true }))?.trim()
+  const right = (await git(repoRoot, ['rev-parse', '--verify', '--quiet', `${b}^{tree}`], { allowFail: true }))?.trim()
+  if (!left || !right) return null
+  return left === right
+}
+
 async function classify(repoRoot, sourceSha, targetSha, forceDiverged) {
   if (!targetSha) return { action: 'push', reason: 'missing' }
   if (sourceSha === targetSha) return { action: 'up-to-date', reason: 'same' }
+  // 内容一致但历史不同（例如一端通过 API 重建提交）：无需镜像，避免误报分叉。
+  if ((await sameTree(repoRoot, sourceSha, targetSha)) === true) return { action: 'up-to-date', reason: 'same-tree' }
   const targetBehind = await isAncestor(repoRoot, targetSha, sourceSha)
   if (targetBehind === true) return { action: 'push', reason: 'behind' }
   if (targetBehind === false) {
