@@ -264,9 +264,15 @@ async function commitToBranch({ repoRoot, target, baseCommit, isNewBranch, files
     result.commit = commit
     result.tree = tree
 
+    // 只 fetch 了 origin/* 的 CI 环境里没有本地 refs/heads/<target>，update-ref 必须
+    // 在存在旧值时传旧值，否则会报 “cannot lock ref ... unable to resolve reference”。
+    const localTargetSha = (await gitAllowFail(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${target}^{commit}`]))?.trim() || null
+    const updateLocalRef = async () => {
+      if (localTargetSha) await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit, localTargetSha])
+      else await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit])
+    }
     if (noPush) {
-      if (isNewBranch) await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit])
-      else await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit, baseCommit])
+      await updateLocalRef()
       result.warnings.push('--no-push：仅写入本地分支，未推送到远端')
       return result
     }
@@ -294,8 +300,7 @@ async function commitToBranch({ repoRoot, target, baseCommit, isNewBranch, files
       }
     }
     result.pushed = true
-    if (isNewBranch) await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit])
-    else await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit, baseCommit])
+    await updateLocalRef()
   } catch (error) {
     result.errors.push(`在 ${target} 上创建提交失败: ${sanitizeText(error.message)}`)
   } finally {
