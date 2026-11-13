@@ -1,0 +1,17 @@
+{
+  "id": "audit-smoke-check",
+  "name": "Audit Smoke Check",
+  "nameZh": "审计冒烟检查",
+  "category": "utility",
+  "order": 98,
+  "description": "仅用于验证仓库自动审计流程的临时节点，验证后会关闭 PR，不合并。",
+  "engine": "both",
+  "inputs": [],
+  "outputs": [],
+  "params": [
+    { "id": "text", "label": "内容", "type": "textarea", "default": "audit smoke" }
+  ],
+  "executor": { "kind": "builtin", "fn": "note" },
+  "cloud": { "capability": "none", "notes": "冒烟测试节点。" },
+  "ui": { "accent": "#6b7280", "width": 220 }
+}
