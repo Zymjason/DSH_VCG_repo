@@ -96,7 +96,7 @@ function usage(message) {
     '环境变量: AUDIT_TYPE / AUDIT_FILES / PR_BODY / ISSUE_BODY / AUDIT_BODY /',
     '  AUDIT_ROOT / AUDIT_REFS / AUDIT_TRUSTED_SOURCES / AUDIT_JSON_OUT /',
     '  AUDIT_MD_OUT / AUDIT_PR / AUDIT_AUTHOR / AUDIT_BASE_REF / AUDIT_COMMIT /',
-    '  AUDIT_SKIP_REFS',
+    '  AUDIT_SKIP_REFS / AUDIT_ALLOW_DUPLICATES（=1 时重复降级为 warning）',
   ].filter((line) => line !== undefined).join('\n')
   return text
 }
@@ -777,12 +777,17 @@ async function main() {
       duplicates = result.entries
       refsReport = { mode: result.mode, checkedRefs: result.checkedRefs, missingRefs: result.missingRefs, degraded: result.degraded, note: result.note }
       if (duplicates.length > 0) {
+        // main/dev 是待并入的正式分支：重复提交 / 重复内容直接打回；
+        // bug/recheck 只是失败与复核留档，不能反过来阻断修正后的重新提交。
+        const blockingRefs = ['main', 'dev']
+        const blocking = duplicates.filter((entry) => blockingRefs.includes(entry.ref))
+        const archived = duplicates.filter((entry) => !blockingRefs.includes(entry.ref))
         if (allowDuplicates) {
           // Issue 复核（recheck）场景：引用内容本来就来自已有分支，重复只提示
           for (const entry of duplicates) warnings.push(`${duplicateDetail(entry)}（仅警告：--allow-duplicates）`)
         } else {
-          // 普通 PR：重复提交 / 重复内容直接判为不通过，由 CI 打回 bug 分支
-          for (const entry of duplicates) errors.push(`跨分支重复（自动审计不通过）：${duplicateDetail(entry)}`)
+          for (const entry of blocking) errors.push(`跨分支重复（自动审计不通过）：${duplicateDetail(entry)}`)
+          for (const entry of archived) warnings.push(`${duplicateDetail(entry)}（留档分支，仅警告）`)
         }
       }
     }

@@ -71,7 +71,7 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
    - 解析 `type` / `files` / `submitter` / `supersedes`；
    - 校验路径与类型匹配（node 只允许 1 个 `nodes/*.json`；workflow 只允许 1 个 `workflows/*.json`）；
    - 复用 `scripts/lib/validate-core.mjs` 做结构与规范校验（与 `node scripts/validate.mjs` 同规则）；
-   - 跨分支重复检测（对比 `main`/`dev`/`bug`/`recheck` 的 id、文件名、内容 sha256）；
+   - 跨分支重复检测（对比 `main`/`dev`/`bug`/`recheck` 的 id、文件名、内容 sha256；普通 PR 命中 `main`/`dev` 即 error，命中 `bug`/`recheck` 留档仅 warning）；
    - `models[]` 声明安全审计（见 §6）；
    - 评论 Markdown 报告；打 `audit:passed` 或 `audit:failed`。
 3. **审计失败**：文件复制到 `bug` 分支，PR 保持打开。投稿者修正后在同一 PR push 新提交，
@@ -82,6 +82,8 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
 5. **重新提交（supersedes）**：新 PR 正文写 `supersedes: #N`。
    CI 校验 `#N` 与新 PR **作者相同**且 **未合并、仍 open**；通过后在旧 PR 评论并关闭旧 PR，
    新 PR 正常重新审计。校验不通过会在新 PR 评论说明原因（不会误关旧 PR）。
+   注意：审计失败的文件会留档 `bug`，但 `bug`/`recheck` 命中重复只提示不阻断，因此修正后
+   可在新 PR（带 `supersedes: #N`）重新提交并重新审计。
 
 > 标签操作需要写权限：手动添加/删除 `status:*` / `recheck:*` 需要维护者权限。
 
@@ -89,7 +91,8 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
 
 1. 用 `.github/ISSUE_TEMPLATE/node-issue.yml`（或 `.gitea/ISSUE_TEMPLATE/node-issue.md`）创建 Issue，
    填写：提交类型、被引用文件、提交者、可选 `supersedes`、复核原因。
-2. CI 审计引用文件 → 评论报告 → 复制到 `recheck` 分支 → 打 `recheck:pending`。
+2. CI 审计引用文件（此流程固定加 `--allow-duplicates`，重复只警告不阻断）→ 评论报告 →
+   复制到 `recheck` 分支 → 打 `recheck:pending`。
 3. 维护者复核：`recheck:approved` → 合并 `recheck` 到 `main`；`recheck:rejected` → 复制到 `bug`。
 4. Issue 的 `submitter` 必须与 Issue 作者一致（防止代提交）。
 
@@ -102,13 +105,23 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
 - 结构/规范：违反 `docs/node-spec.md` / `docs/workflow-spec.md`（id、文件名、executor.fn、
   ports、params、连线、悬空必需输入、环、manifest 一致性等）；
 - `models[]` 硬错误：`filename` 缺失/含路径分隔符或 `..`、`url` 缺失或非法 URL、`format` 缺失或不在
-  `safetensors|ckpt|pt|pth|bin|gguf`、`size` 非正整数、`sha256` 非 64 位 hex。
+  `safetensors|ckpt|pt|pth|bin|gguf`、`size` 非正整数、`sha256` 非 64 位 hex；
+- **跨分支重复（普通 PR）**：提交的 id / 文件名 / 内容 sha256 与 `main`/`dev` 已有内容相同
+  （或 id、文件名已存在）→ **error**，报告逐项列出 `分支 / 文件 / id / sha256`，CI 打
+  `audit:failed` 并把文件打回 `bug` 分支。这是 §16.1 的“自动审核重复提交/重复内容”要求，
+  普通 PR 不再放行与正式分支重复的内容。
+- **命中 `bug`/`recheck` 留档的重复**：只提示 warning，不阻断——否则审计失败被打回后，
+  修正版本将永远无法重新提交。
 
 仅警告（**不阻止上传**，报告列出）：
 
 - URL 非 https；URL 主机不在 `trusted-sources.json`；缺 `sha256`；缺 `size`；缺 `name`；
-- 跨分支重复（内容相同 / id 相同 / 文件名相同）——`recheck` 场景天然会命中，属正常提示；
-  默认把跨分支重复（相同 id / 文件名 / 内容 sha256）视为 error 并打回；Issue 复核流程使用 `--allow-duplicates` 把重复降级为 warning（`--strict-duplicates` 为兼容保留）。
+- **Issue 复核（`--allow-duplicates` / `AUDIT_ALLOW_DUPLICATES=1`）场景下的跨分支重复**：
+  复核本来就是把已有内容移入 `recheck`，因此重复只提示不阻断；
+- 缺失对比分支、非 git 仓库等降级提示。
+
+> 重复检查对正式分支（`main`/`dev`）零容忍；`bug`/`recheck` 只是失败与复核留档，命中时仅
+> warning，因此修正后可以正常重新提交（建议带 `supersedes: #N` 引用旧 PR）。
 
 模型声明规范见 `docs/node-spec.md` §12、`docs/workflow-spec.md` §8；可信源清单见根目录
 `trusted-sources.json`，由维护者审核更新。
@@ -186,6 +199,11 @@ node scripts/audit-submission.mjs \
   --author alice --pr 42 --base-ref dev \
   --json-out /tmp/audit-report.json --md-out /tmp/audit-comment.md
 
+# 模拟 Issue 复核（引用已有内容，重复只警告）
+node scripts/audit-submission.mjs \
+  --body-file /tmp/issue-body.md --allow-duplicates \
+  --author alice --pr 77 --json-out /tmp/issue-report.json
+
 # 分支路由（本地只写分支，不 push；验证后可重置）
 node scripts/route-branch.mjs --target bug --files nodes/my-node.json \
   --ref auto --no-push --dry-run
@@ -208,8 +226,9 @@ node scripts/sync-mirrors.mjs --source . --target /tmp/mirror.git --dry-run
    `.gitea/workflows/*` 未指定 `types` 而是在 step 里过滤 `github.event.action`；
    `vars` 上下文在较旧 Gitea 不可用，此时改用文件中的默认值。Gitea 实例若无法拉取
    `actions/checkout`，可把 checkout step 换成 `git clone`（见下方片段）。
-4. **跨分支重复只是警告**：`recheck` / 重新提交天然会与旧分支内容相同，因此默认不阻断；
-   默认即阻断重复；Issue 复核场景使用 `--allow-duplicates` 降级为 warning。
+4. **重复只对正式分支阻断**：普通 PR 命中 `main`/`dev` 的 id/文件名/内容 sha256 重复会 error
+   并打回 `bug`；命中 `bug`/`recheck` 留档仅 warning，因此修正后可直接在新 PR 重新提交。
+   Issue 复核流程仍显式使用 `--allow-duplicates`（天然与已有内容重复）。
 5. **分叉/领先的镜像分支会被跳过**：为了不覆盖对端多出的提交，`diverged` 与 `target-ahead`
    只报告不推送；需要强制收敛时手动在目标端处理或使用 `--force-diverged`（谨慎）。
 6. **tag 比较基于 tag 引用 sha**（annotated tag 为 tag 对象 sha），不比较 peeled commit；
