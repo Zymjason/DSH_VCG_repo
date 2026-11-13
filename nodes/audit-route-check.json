@@ -1,0 +1,17 @@
+{
+  "id": "note",
+  "name": "Note",
+  "nameZh": "注释",
+  "category": "utility",
+  "order": 95,
+  "description": "画布注释：不参与运算、无输入输出，仅用于记录工作流说明。",
+  "engine": "both",
+  "inputs": [],
+  "outputs": [],
+  "params": [
+    { "id": "text", "label": "注释内容", "type": "textarea", "default": "在这里写工作流说明…" }
+  ],
+  "executor": { "kind": "builtin", "fn": "note" },
+  "cloud": { "capability": "none", "notes": "注释节点，执行时跳过。" },
+  "ui": { "accent": "#6b7280", "width": 240 }
+}
