@@ -5,7 +5,7 @@ name: audit-pr
 #   - 标签/评论/合并/关闭 PR 全部用 curl 调 Gitea API（Authorization: token <token>）
 #   - Gitea API 合并 PR 用 POST /pulls/{index}/merge，payload {"Do":"merge"}
 #   - 不指定 pull_request types（不同 Gitea 版本事件名不同），在 step 里用 github.event.action 过滤
-# 注意：Gitea 仓库需配置 secrets.GITEA_TOKEN（或使用默认 github.token，需有 repo 写权限）。
+# 注意：Gitea 侧直接使用内置 github.token（仓库写权限）；无需也不能创建 GITEA_* 名称的 secret。
 
 on:
   pull_request:
@@ -37,7 +37,7 @@ jobs:
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       EVENT_ACTION: ${{ github.event.action }}
       EVENT_LABEL: ${{ github.event.label.name }}
-      TOKEN: ${{ secrets.GITEA_TOKEN }}
+      TOKEN: ${{ github.token }}
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v4

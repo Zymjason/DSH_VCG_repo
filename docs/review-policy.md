@@ -130,7 +130,7 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
 ## 7. 每日镜像同步
 
 - 时间：`0 14 * * *` UTC = **每天 22:00 Asia/Shanghai**；GitHub Actions 与 Gitea Actions 各一个。
-- 方向：GitHub → Gitea（`secrets.GITEA_TOKEN`）；Gitea → GitHub（`secrets.GH_TOKEN`）。
+- 方向：GitHub → Gitea（`secrets.GITEA_TOKEN`）；Gitea → GitHub（`secrets.GH_TOKEN`）。Gitea 仓库的审计/合并使用内置 `github.token`（Gitea 不允许创建 `GITEA_*`/`GITHUB_*` 名称的 secret）。
 - 内容：**所有分支 + tag**。规则（`scripts/sync-mirrors.mjs`）：
   - 目标缺失（`missing`）或目标落后（`behind`：目标 tip 是源 tip 的祖先）→ `git push --force-with-lease`；
   - 目标领先（`target-ahead`）或分叉（`diverged`）→ 跳过并在报告注明（由反方向任务处理），
@@ -171,7 +171,7 @@ node scripts/sync-mirrors.mjs --source . --target /tmp/mirror.git
 ### Gitea（`gitea.com/ZymJason_DSH/DSH_VCG_repo` 或实际仓库）
 
 1. **Secrets**：仓库 → Settings → Actions → Secrets：
-   - `GITEA_TOKEN`：Gitea 令牌（repo 写权限；若 `github.token` 已具备写权限可省略，
+   - 审计/合并使用内置 `github.token`（无需 `GITEA_TOKEN`；Gitea 禁止该 secret 名）；如需自定义请用其它名称并改工作流。原 `GITEA_TOKEN` 说明（repo 写权限，若 `github.token` 已具备可省略，
      工作流会自动回退到 `github.token`）；
    - `GH_TOKEN`：GitHub PAT（`repo` scope），供 `sync-github` 使用。
 2. **Variables（可选）**：`GH_OWNER`（默认 `ZymJason`）、`GH_REPO`（默认 `DSH_VCG_repo`）、

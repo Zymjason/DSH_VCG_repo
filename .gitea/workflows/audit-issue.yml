@@ -32,7 +32,7 @@ jobs:
       ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
       EVENT_ACTION: ${{ github.event.action }}
       EVENT_LABEL: ${{ github.event.label.name }}
-      TOKEN: ${{ secrets.GITEA_TOKEN }}
+      TOKEN: ${{ github.token }}
     steps:
       - name: Checkout default branch
         uses: actions/checkout@v4
