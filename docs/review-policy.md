@@ -250,3 +250,13 @@ Gitea 无法使用 `actions/checkout` 时的替代写法：
           HOST="${GITHUB_SERVER_URL#https://}"
           git clone "https://${GITHUB_REPOSITORY_OWNER}:${GITHUB_TOKEN}@${HOST}/${GITHUB_REPOSITORY}.git" .
 ```
+## 11. Gitea Actions 运行器要求
+
+- `.gitea/workflows/*` 与 GitHub 侧功能等价，但 Gitea 实例必须为仓库配置可用的 Actions
+  运行器（Settings → Actions → Runners）；只开启 `has_actions` 而没有 runner 时不会产生任何
+  运行记录（`GET /repos/{owner}/{repo}/actions/tasks` 为空）。
+- 推荐以 **GitHub Actions 为主**（PR 审计 + `sync-gitea` 每日镜像）。Gitea 侧工作流适用于
+  自带 runner 的实例；在无 runner 的 Gitea 实例上提交 PR 时，由维护者本地运行
+  `node scripts/audit-submission.mjs` 与 `node scripts/route-branch.mjs` 复核。
+- 每日镜像的 Gitea → GitHub 方向依赖 Gitea runner；没有 runner 时只有 GitHub → Gitea
+  方向自动执行，可用手动 `node scripts/sync-mirrors.mjs --source <gitea> --target <github>` 补齐。
