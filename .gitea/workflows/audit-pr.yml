@@ -126,7 +126,7 @@ jobs:
             echo "::notice::manifest.json 无需变更"
             exit 0
           fi
-          git commit -m "chore(manifest): 自动登记本次提交的节点/工作流"
+          git commit -m "chore(manifest): 自动登记本次提交的节点/工作流 [skip ci]"
           git push origin "HEAD:${HEAD_REF}" || {
             echo "::warning::推送 manifest 更新失败（fork PR 或分支保护），请维护者合并后手动运行 node scripts/update-manifest.mjs"
           }
