@@ -1,0 +1,30 @@
+{
+  "id": "empty-latent-image",
+  "name": "Empty Latent Image",
+  "nameZh": "空潜空间",
+  "category": "latent",
+  "order": 25,
+  "description": "生成指定宽高与批量的空潜空间；宽高输入可接图像属性节点，未连线时使用参数值。",
+  "engine": "both",
+  "inputs": [
+    { "id": "width", "label": "WIDTH", "type": "number", "optional": true },
+    { "id": "height", "label": "HEIGHT", "type": "number", "optional": true }
+  ],
+  "outputs": [
+    { "id": "latent", "label": "LATENT", "type": "latent" }
+  ],
+  "params": [
+    { "id": "width", "label": "宽度", "type": "number", "default": 1280, "min": 64, "max": 4096, "step": 8 },
+    { "id": "height", "label": "高度", "type": "number", "default": 720, "min": 64, "max": 4096, "step": 8 },
+    { "id": "batch_size", "label": "批量", "type": "number", "default": 1, "min": 1, "max": 4, "step": 1 }
+  ],
+  "executor": { "kind": "builtin", "fn": "emptyLatent" },
+  "cloud": { "capability": "none", "notes": "仅承载目标尺寸；云端由 ksampler 按 width×height 组装 API 的 size 字段。" },
+  "local": {
+    "comfyui": {
+      "class_type": "EmptyLatentImage",
+      "map": { "width": "params.width", "height": "params.height", "batch_size": "params.batch_size" }
+    }
+  },
+  "ui": { "accent": "#7c5cff", "width": 264 }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "text-input",
+  "name": "Text Input",
+  "nameZh": "文本输入",
+  "category": "input",
+  "order": 11,
+  "description": "单段文本来源，常用于自定义 API 节点、文本输出或视频提示词。",
+  "engine": "both",
+  "inputs": [],
+  "outputs": [
+    { "id": "text", "label": "TEXT", "type": "text" }
+  ],
+  "params": [
+    { "id": "text", "label": "文本", "type": "textarea", "default": "一只戴着墨镜的柯基犬，赛博朋克城市夜景，霓虹灯，电影感" }
+  ],
+  "executor": { "kind": "builtin", "fn": "textInput" },
+  "cloud": { "capability": "none", "notes": "纯文本直通，不调用任何 API。" },
+  "ui": { "accent": "#6366f1", "width": 260 }
+}

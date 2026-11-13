@@ -1,0 +1,19 @@
+{
+  "id": "model-loader",
+  "name": "Model Loader",
+  "nameZh": "模型加载器",
+  "category": "model",
+  "order": 20,
+  "description": "选择云端生图 / 生视频模型（下拉来自设置中的模型映射），返回 providerId 与模型名。",
+  "engine": "cloud",
+  "inputs": [],
+  "outputs": [
+    { "id": "model", "label": "MODEL", "type": "model" }
+  ],
+  "params": [
+    { "id": "model", "label": "模型", "type": "model", "default": "" }
+  ],
+  "executor": { "kind": "builtin", "fn": "modelLoader" },
+  "cloud": { "capability": "none", "notes": "不调用 API，仅校验并返回选中的模型；留空使用设置中的默认模型。" },
+  "ui": { "accent": "#3b82f6", "width": 280 }
+}

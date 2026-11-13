@@ -1,0 +1,21 @@
+{
+  "id": "prompt-input",
+  "name": "Prompt Input",
+  "nameZh": "提示词输入",
+  "category": "input",
+  "order": 10,
+  "description": "正向 / 负向提示词来源。文本直通，可连接到 CLIP 文本编码器、视频节点或文本输出。",
+  "engine": "both",
+  "inputs": [],
+  "outputs": [
+    { "id": "positive", "label": "POSITIVE", "type": "text" },
+    { "id": "negative", "label": "NEGATIVE", "type": "text" }
+  ],
+  "params": [
+    { "id": "positive", "label": "正向提示词", "type": "textarea", "default": "a cyberpunk corgi, neon rain, cinematic lighting, ultra detailed" },
+    { "id": "negative", "label": "负向提示词", "type": "textarea", "default": "lowres, blurry, watermark, text, deformed" }
+  ],
+  "executor": { "kind": "builtin", "fn": "promptInput" },
+  "cloud": { "capability": "none", "notes": "纯文本直通，不调用任何 API。" },
+  "ui": { "accent": "#8b5cf6", "width": 288 }
+}

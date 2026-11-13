@@ -1,0 +1,20 @@
+{
+  "id": "video-output",
+  "name": "Video Output",
+  "nameZh": "视频输出",
+  "category": "video",
+  "order": 80,
+  "description": "把视频保存到工作区输出目录并登记到输出列表。",
+  "engine": "cloud",
+  "inputs": [
+    { "id": "video", "label": "VIDEO", "type": "video" }
+  ],
+  "outputs": [],
+  "params": [
+    { "id": "filename", "label": "文件名前缀", "type": "text", "default": "vcg-video" },
+    { "id": "format", "label": "格式", "type": "select", "options": ["mp4", "webm"], "default": "mp4" }
+  ],
+  "executor": { "kind": "builtin", "fn": "videoOutput" },
+  "cloud": { "capability": "none", "notes": "下载并保存视频到 baseDir/outputDir。" },
+  "ui": { "accent": "#16a34a", "width": 264 }
+}

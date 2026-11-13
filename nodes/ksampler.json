@@ -1,0 +1,46 @@
+{
+  "id": "ksampler",
+  "name": "KSampler",
+  "nameZh": "采样器",
+  "category": "sampling",
+  "order": 40,
+  "description": "把条件与潜空间采样成图像（云端由生图 API 完成；本地由 ComfyUI KSampler 完成）。",
+  "engine": "both",
+  "inputs": [
+    { "id": "model", "label": "MODEL", "type": "model" },
+    { "id": "positive", "label": "POSITIVE", "type": "conditioning" },
+    { "id": "negative", "label": "NEGATIVE", "type": "conditioning" },
+    { "id": "latent", "label": "LATENT", "type": "latent" }
+  ],
+  "outputs": [
+    { "id": "image", "label": "IMAGE", "type": "image" }
+  ],
+  "params": [
+    { "id": "seed", "label": "种子", "type": "number", "default": 42, "min": 0, "max": 2147483647, "step": 1 },
+    { "id": "steps", "label": "步数", "type": "number", "default": 20, "min": 1, "max": 150, "step": 1 },
+    { "id": "cfg", "label": "CFG", "type": "number", "default": 7, "min": 1, "max": 30, "step": 0.5 },
+    { "id": "sampler", "label": "采样器", "type": "select", "options": ["euler", "dpmpp_2m", "uni_pc"], "default": "euler" },
+    { "id": "scheduler", "label": "调度器", "type": "select", "options": ["normal", "karras", "exponential", "sgm_uniform"], "default": "normal" },
+    { "id": "denoise", "label": "降噪", "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.01 }
+  ],
+  "executor": { "kind": "builtin", "fn": "ksampler" },
+  "cloud": { "capability": "image", "notes": "调用设置中默认生图模型（如 wan2.7-image），返回图片 URL 与 usage。" },
+  "local": {
+    "comfyui": {
+      "class_type": "KSampler",
+      "map": {
+        "seed": "params.seed",
+        "steps": "params.steps",
+        "cfg": "params.cfg",
+        "sampler_name": "params.sampler",
+        "scheduler": "params.scheduler",
+        "denoise": "params.denoise",
+        "model": "inputs.model",
+        "positive": "inputs.positive",
+        "negative": "inputs.negative",
+        "latent_image": "inputs.latent"
+      }
+    }
+  },
+  "ui": { "accent": "#7c5cff", "width": 264 }
+}

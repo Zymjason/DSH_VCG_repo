@@ -1,0 +1,25 @@
+{
+  "id": "video-sampler",
+  "name": "Video Sampler",
+  "nameZh": "视频采样器",
+  "category": "video",
+  "order": 70,
+  "description": "根据条件提示词（可选首帧图像）生成视频；依赖设置中已配置视频模型 / 视频 API。",
+  "engine": "cloud",
+  "inputs": [
+    { "id": "positive", "label": "POSITIVE", "type": "conditioning" },
+    { "id": "image", "label": "IMAGE", "type": "image", "optional": true }
+  ],
+  "outputs": [
+    { "id": "video", "label": "VIDEO", "type": "video" }
+  ],
+  "params": [
+    { "id": "seed", "label": "种子", "type": "number", "default": 7, "min": 0, "max": 2147483647, "step": 1 },
+    { "id": "duration", "label": "时长（秒）", "type": "number", "default": 5, "min": 1, "max": 30, "step": 1 },
+    { "id": "fps", "label": "帧率", "type": "number", "default": 24, "min": 8, "max": 60, "step": 1 },
+    { "id": "size", "label": "尺寸", "type": "select", "options": ["1280*720", "720*1280", "1024*1024"], "default": "1280*720" }
+  ],
+  "executor": { "kind": "builtin", "fn": "videoSampler" },
+  "cloud": { "capability": "video", "notes": "调用设置中的视频模型 / openai-video 类 provider；未配置时返回可读错误。" },
+  "ui": { "accent": "#22c55e", "width": 288 }
+}

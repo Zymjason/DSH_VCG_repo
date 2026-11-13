@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "id": "wf-txt2video",
+  "name": "文生视频",
+  "description": "提示词 → CLIP 编码（conditioning）→ 视频采样 → 视频输出。视频为云端能力，需在设置中配置视频模型 / 视频类 provider。",
+  "createdAt": "2026-11-13T02:40:00.000Z",
+  "updatedAt": "2026-11-13T02:40:00.000Z",
+  "viewport": { "x": 0, "y": 0, "scale": 1 },
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "prompt-input",
+      "x": 80,
+      "y": 120,
+      "params": {
+        "positive": "a corgi surfing a neon wave, cinematic camera move, moody lighting, 4k",
+        "negative": "blurry, low quality, watermark"
+      },
+      "title": "提示词"
+    },
+    {
+      "id": "n2",
+      "type": "clip-text-encoder",
+      "x": 460,
+      "y": 120,
+      "params": { "text": "a corgi surfing a neon wave, cinematic camera move, moody lighting, 4k", "rewrite": false },
+      "title": "条件编码"
+    },
+    {
+      "id": "n3",
+      "type": "video-sampler",
+      "x": 840,
+      "y": 120,
+      "params": { "seed": 7, "duration": 5, "fps": 24, "size": "1280*720" },
+      "title": "视频采样"
+    },
+    {
+      "id": "n4",
+      "type": "video-output",
+      "x": 1200,
+      "y": 120,
+      "params": { "filename": "vcg-txt2video", "format": "mp4" },
+      "title": "视频输出"
+    },
+    {
+      "id": "n5",
+      "type": "note",
+      "x": 460,
+      "y": 500,
+      "params": {
+        "text": "文生视频：提示词 → CLIP 编码（conditioning）→ 视频采样 → 视频输出。视频为云端能力，需在设置中配置视频模型或 openai-video 类 provider；未配置时运行会返回可读错误。"
+      },
+      "title": "说明"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": { "node": "n1", "port": "positive" }, "to": { "node": "n2", "port": "text" } },
+    { "id": "e2", "from": { "node": "n2", "port": "conditioning" }, "to": { "node": "n3", "port": "positive" } },
+    { "id": "e3", "from": { "node": "n3", "port": "video" }, "to": { "node": "n4", "port": "video" } }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "image-output",
+  "name": "Image Output",
+  "nameZh": "图像输出",
+  "category": "decode",
+  "order": 60,
+  "description": "把图像保存到工作区输出目录（outputDir），返回本地路径并登记到输出列表。",
+  "engine": "both",
+  "inputs": [
+    { "id": "image", "label": "IMAGE", "type": "image" }
+  ],
+  "outputs": [],
+  "params": [
+    { "id": "filename", "label": "文件名前缀", "type": "text", "default": "vcg-image" },
+    { "id": "format", "label": "格式", "type": "select", "options": ["png", "jpg", "webp"], "default": "png" },
+    { "id": "open_after", "label": "完成后打开目录", "type": "toggle", "default": false }
+  ],
+  "executor": { "kind": "builtin", "fn": "imageOutput" },
+  "cloud": { "capability": "none", "notes": "保存到 baseDir/outputDir，返回本地绝对路径。" },
+  "ui": { "accent": "#10b981", "width": 264 }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "text-output",
+  "name": "Text Output",
+  "nameZh": "文本输出",
+  "category": "decode",
+  "order": 85,
+  "description": "接收文本并在节点结果中展示（调试提示词、查看文本模型输出）。",
+  "engine": "both",
+  "inputs": [
+    { "id": "text", "label": "TEXT", "type": "text" }
+  ],
+  "outputs": [],
+  "params": [
+    { "id": "label", "label": "标签", "type": "text", "default": "" }
+  ],
+  "executor": { "kind": "builtin", "fn": "textOutput" },
+  "cloud": { "capability": "none", "notes": "直接返回文本，不调用 API。" },
+  "ui": { "accent": "#64748b", "width": 240 }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "image-props",
+  "name": "Image Properties",
+  "nameZh": "图像属性",
+  "category": "latent",
+  "order": 12,
+  "description": "目标宽高常量来源：输出两个数字端口，接到空潜空间或视频节点的尺寸输入。",
+  "engine": "both",
+  "inputs": [],
+  "outputs": [
+    { "id": "width", "label": "WIDTH", "type": "number" },
+    { "id": "height", "label": "HEIGHT", "type": "number" }
+  ],
+  "params": [
+    { "id": "width", "label": "宽度", "type": "number", "default": 1280, "min": 64, "max": 4096, "step": 8 },
+    { "id": "height", "label": "高度", "type": "number", "default": 720, "min": 64, "max": 4096, "step": 8 }
+  ],
+  "executor": { "kind": "builtin", "fn": "imageProps" },
+  "cloud": { "capability": "none", "notes": "把参数值直通到输出端口，不调用 API。" },
+  "ui": { "accent": "#0ea5e9", "width": 240 }
+}

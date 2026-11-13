@@ -1,0 +1,28 @@
+{
+  "id": "checkpoint-loader",
+  "name": "Checkpoint Loader",
+  "nameZh": "检查点加载器",
+  "category": "model",
+  "order": 21,
+  "description": "ComfyUI 同族检查点加载器：本地模式加载 checkpoint 并同时产出 MODEL / CLIP / VAE；云端模式等价于模型选择。",
+  "engine": "both",
+  "inputs": [],
+  "outputs": [
+    { "id": "model", "label": "MODEL", "type": "model" },
+    { "id": "clip", "label": "CLIP", "type": "model" },
+    { "id": "vae", "label": "VAE", "type": "model" }
+  ],
+  "params": [
+    { "id": "ckpt_name", "label": "Checkpoint 文件（本地）", "type": "text", "default": "sd_xl_base_1.0.safetensors" },
+    { "id": "model", "label": "云端模型", "type": "model", "default": "" }
+  ],
+  "executor": { "kind": "builtin", "fn": "modelLoader" },
+  "cloud": { "capability": "none", "notes": "云端忽略 ckpt_name，使用『云端模型』参数或设置中的默认图像模型。" },
+  "local": {
+    "comfyui": {
+      "class_type": "CheckpointLoaderSimple",
+      "map": { "ckpt_name": "params.ckpt_name" }
+    }
+  },
+  "ui": { "accent": "#2563eb", "width": 288 }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "clip-text-encoder",
+  "name": "CLIP Text Encoder",
+  "nameZh": "CLIP 文本编码器",
+  "category": "model",
+  "order": 30,
+  "description": "把提示词编码为 conditioning（云端直通，等价于已编码提示词；本地映射 ComfyUI CLIPTextEncode）。正/负条件各用一个实例。",
+  "engine": "both",
+  "inputs": [
+    { "id": "clip", "label": "CLIP", "type": "model", "optional": true },
+    { "id": "text", "label": "TEXT", "type": "text", "optional": true }
+  ],
+  "outputs": [
+    { "id": "conditioning", "label": "CONDITIONING", "type": "conditioning" }
+  ],
+  "params": [
+    { "id": "text", "label": "文本", "type": "textarea", "default": "" },
+    { "id": "rewrite", "label": "AI 润色", "type": "toggle", "default": false }
+  ],
+  "executor": { "kind": "builtin", "fn": "clipTextEncode" },
+  "cloud": { "capability": "none", "notes": "透传提示词；rewrite=true 时调用设置中的文本模型润色后再输出。" },
+  "local": {
+    "comfyui": {
+      "class_type": "CLIPTextEncode",
+      "map": { "clip": "inputs.clip", "text": "inputs.text" }
+    }
+  },
+  "ui": { "accent": "#a855f7", "width": 288 }
+}

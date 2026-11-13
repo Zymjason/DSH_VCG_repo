@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "id": "wf-txt2img",
+  "name": "基础文生图",
+  "description": "正向/负向提示词 → 模型 → 空潜空间 → 采样 → 解码 → 输出（默认工作流，与插件内置 fallback 同构；云端 / 本地均可用）。",
+  "createdAt": "2026-11-13T02:40:00.000Z",
+  "updatedAt": "2026-11-13T02:40:00.000Z",
+  "viewport": { "x": 0, "y": 0, "scale": 1 },
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "prompt-input",
+      "x": 60,
+      "y": 120,
+      "params": {
+        "positive": "a cyberpunk corgi, neon rain, cinematic lighting, ultra detailed",
+        "negative": "lowres, blurry, watermark, text, deformed"
+      },
+      "title": "提示词"
+    },
+    {
+      "id": "n2",
+      "type": "model-loader",
+      "x": 420,
+      "y": 120,
+      "params": { "model": "" },
+      "title": "模型"
+    },
+    {
+      "id": "n3",
+      "type": "empty-latent-image",
+      "x": 420,
+      "y": 440,
+      "params": { "width": 1280, "height": 720, "batch_size": 1 },
+      "title": "空潜空间"
+    },
+    {
+      "id": "n4",
+      "type": "ksampler",
+      "x": 800,
+      "y": 240,
+      "params": { "seed": 42, "steps": 20, "cfg": 7, "sampler": "euler", "scheduler": "normal", "denoise": 1 },
+      "title": "采样"
+    },
+    {
+      "id": "n5",
+      "type": "vae-decode",
+      "x": 1140,
+      "y": 240,
+      "params": {},
+      "title": "解码"
+    },
+    {
+      "id": "n6",
+      "type": "image-output",
+      "x": 1420,
+      "y": 240,
+      "params": { "filename": "vcg-txt2img", "format": "png", "open_after": false },
+      "title": "图像输出"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": { "node": "n1", "port": "positive" }, "to": { "node": "n4", "port": "positive" } },
+    { "id": "e2", "from": { "node": "n1", "port": "negative" }, "to": { "node": "n4", "port": "negative" } },
+    { "id": "e3", "from": { "node": "n2", "port": "model" }, "to": { "node": "n4", "port": "model" } },
+    { "id": "e4", "from": { "node": "n3", "port": "latent" }, "to": { "node": "n4", "port": "latent" } },
+    { "id": "e5", "from": { "node": "n4", "port": "image" }, "to": { "node": "n5", "port": "image" } },
+    { "id": "e6", "from": { "node": "n5", "port": "image" }, "to": { "node": "n6", "port": "image" } }
+  ]
+}

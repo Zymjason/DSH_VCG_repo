@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "id": "wf-example",
+  "name": "自定义 API 节点示例",
+  "description": "文本 → example-node（executor.kind=\"http\" 自定义 API 节点）→ 图像输出。需在设置中打开专业模式并配置自定义 provider 的 API Key。",
+  "createdAt": "2026-11-13T02:40:00.000Z",
+  "updatedAt": "2026-11-13T02:40:00.000Z",
+  "viewport": { "x": 0, "y": 0, "scale": 1 },
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "text-input",
+      "x": 80,
+      "y": 160,
+      "params": { "text": "一只戴墨镜的柯基犬，赛博朋克城市夜景，霓虹灯，电影感" },
+      "title": "文本"
+    },
+    {
+      "id": "n2",
+      "type": "example-node",
+      "x": 460,
+      "y": 120,
+      "params": { "api": "example-generate-image", "size": "1024*1024", "style": "photographic" },
+      "title": "自定义 API"
+    },
+    {
+      "id": "n3",
+      "type": "image-output",
+      "x": 880,
+      "y": 160,
+      "params": { "filename": "vcg-example", "format": "png", "open_after": false },
+      "title": "图像输出"
+    },
+    {
+      "id": "n4",
+      "type": "note",
+      "x": 460,
+      "y": 500,
+      "params": {
+        "text": "专业模式示例：文本 → 自定义 HTTP API 节点 → 图像输出。example-node 的 executor.request.url 是演示占位地址，替换为真实 API 后即可使用；API Key 通过 ${settings.apiKey} 从设置中的自定义 provider 注入，导入自定义节点需要打开专业模式。"
+      },
+      "title": "说明"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": { "node": "n1", "port": "text" }, "to": { "node": "n2", "port": "text" } },
+    { "id": "e2", "from": { "node": "n2", "port": "image" }, "to": { "node": "n3", "port": "image" } }
+  ]
+}

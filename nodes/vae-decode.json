@@ -1,0 +1,26 @@
+{
+  "id": "vae-decode",
+  "name": "VAE Decode",
+  "nameZh": "VAE 解码",
+  "category": "decode",
+  "order": 50,
+  "description": "把采样结果解码为可视图像；云端生图结果本身已是解码图像，因此直通并可选下载落盘。",
+  "engine": "both",
+  "inputs": [
+    { "id": "image", "label": "IMAGE", "type": "image" },
+    { "id": "vae", "label": "VAE", "type": "model", "optional": true }
+  ],
+  "outputs": [
+    { "id": "image", "label": "IMAGE", "type": "image" }
+  ],
+  "params": [],
+  "executor": { "kind": "builtin", "fn": "vaeDecode" },
+  "cloud": { "capability": "none", "notes": "云端直通（图片 URL 或已落盘路径），不调用 API。" },
+  "local": {
+    "comfyui": {
+      "class_type": "VAEDecode",
+      "map": { "samples": "inputs.image", "vae": "inputs.vae" }
+    }
+  },
+  "ui": { "accent": "#06b6d4", "width": 264 }
+}

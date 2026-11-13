@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "nodes": [
+    "prompt-input",
+    "text-input",
+    "image-props",
+    "model-loader",
+    "checkpoint-loader",
+    "empty-latent-image",
+    "clip-text-encoder",
+    "ksampler",
+    "vae-decode",
+    "image-output",
+    "video-sampler",
+    "video-output",
+    "text-output",
+    "note",
+    "example-node"
+  ],
+  "workflows": [
+    "wf-txt2img",
+    "wf-txt2video",
+    "wf-product-shot",
+    "wf-example"
+  ],
+  "minPluginVersion": "1.0.0"
+}

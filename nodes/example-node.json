@@ -1,0 +1,51 @@
+{
+  "id": "example-node",
+  "name": "Example API Node",
+  "nameZh": "示例 API 节点",
+  "category": "custom",
+  "order": 100,
+  "description": "专业模式自定义节点示例：executor.kind=\"http\" 以声明式请求调用第三方生图 API（不含任何内置密钥，需在设置中配置 provider）。",
+  "engine": "cloud",
+  "inputs": [
+    { "id": "text", "label": "PROMPT", "type": "text", "optional": true },
+    { "id": "image", "label": "IMAGE", "type": "image", "optional": true }
+  ],
+  "outputs": [
+    { "id": "image", "label": "IMAGE", "type": "image" }
+  ],
+  "params": [
+    { "id": "api", "label": "API 名称", "type": "select", "options": ["example-generate-image"], "default": "example-generate-image" },
+    { "id": "size", "label": "尺寸", "type": "select", "options": ["1024*1024", "1280*720", "720*1280"], "default": "1024*1024" },
+    { "id": "style", "label": "风格", "type": "select", "options": ["photographic", "illustration", "anime", "3d"], "default": "photographic" }
+  ],
+  "executor": {
+    "kind": "http",
+    "request": {
+      "url": "https://api.example.com/v1/images/generations",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer ${settings.apiKey}",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "model": "${params.api}",
+        "prompt": "${inputs.text}",
+        "size": "${params.size}",
+        "style": "${params.style}",
+        "n": 1
+      },
+      "timeoutMs": 120000
+    },
+    "response": {
+      "images": "$.data[*].url",
+      "text": "$.text",
+      "error": "$.error.message"
+    }
+  },
+  "cloud": {
+    "capability": "image",
+    "api": "example-generate-image",
+    "notes": "演示节点：地址为占位，请替换为真实 API；API Key 由设置中的自定义 provider 提供，导入需打开专业模式。"
+  },
+  "ui": { "accent": "#f59e0b", "width": 300 }
+}

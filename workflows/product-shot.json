@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "id": "wf-product-shot",
+  "name": "产品图生成",
+  "description": "电商产品图：检查点（MODEL/CLIP/VAE）+ 正/负提示词编码 + 方形空潜空间 → KSampler → VAE 解码 → 图像输出（ComfyUI 同族，云端 / 本地均可运行）。",
+  "createdAt": "2026-11-13T02:40:00.000Z",
+  "updatedAt": "2026-11-13T02:40:00.000Z",
+  "viewport": { "x": 0, "y": 0, "scale": 1 },
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "prompt-input",
+      "x": 60,
+      "y": 80,
+      "params": {
+        "positive": "a matte black wireless headphone on a white marble podium, soft studio light, product photography, 85mm lens, high detail",
+        "negative": "lowres, busy background, text, watermark, distorted product, extra objects"
+      },
+      "title": "产品提示词"
+    },
+    {
+      "id": "n2",
+      "type": "checkpoint-loader",
+      "x": 60,
+      "y": 420,
+      "params": { "ckpt_name": "sd_xl_base_1.0.safetensors", "model": "" },
+      "title": "检查点"
+    },
+    {
+      "id": "n3",
+      "type": "image-props",
+      "x": 60,
+      "y": 760,
+      "params": { "width": 1024, "height": 1024 },
+      "title": "图像属性"
+    },
+    {
+      "id": "n4",
+      "type": "clip-text-encoder",
+      "x": 460,
+      "y": 80,
+      "params": {
+        "text": "a matte black wireless headphone on a white marble podium, soft studio light, product photography, 85mm lens, high detail",
+        "rewrite": false
+      },
+      "title": "正向编码"
+    },
+    {
+      "id": "n5",
+      "type": "clip-text-encoder",
+      "x": 460,
+      "y": 400,
+      "params": {
+        "text": "lowres, busy background, text, watermark, distorted product, extra objects",
+        "rewrite": false
+      },
+      "title": "负向编码"
+    },
+    {
+      "id": "n6",
+      "type": "empty-latent-image",
+      "x": 460,
+      "y": 720,
+      "params": { "width": 1024, "height": 1024, "batch_size": 1 },
+      "title": "空潜空间"
+    },
+    {
+      "id": "n7",
+      "type": "ksampler",
+      "x": 840,
+      "y": 240,
+      "params": { "seed": 2026, "steps": 32, "cfg": 6.5, "sampler": "dpmpp_2m", "scheduler": "karras", "denoise": 1 },
+      "title": "采样"
+    },
+    {
+      "id": "n8",
+      "type": "vae-decode",
+      "x": 1180,
+      "y": 240,
+      "params": {},
+      "title": "VAE 解码"
+    },
+    {
+      "id": "n9",
+      "type": "image-output",
+      "x": 1460,
+      "y": 240,
+      "params": { "filename": "vcg-product", "format": "png", "open_after": false },
+      "title": "图像输出"
+    },
+    {
+      "id": "n10",
+      "type": "note",
+      "x": 1460,
+      "y": 560,
+      "params": {
+        "text": "产品图示例：检查点同时提供 MODEL / CLIP / VAE，图像属性提供方形尺寸；本地模式需在设置中配置 ComfyUI 服务端，云端模式使用设置中的默认图像模型。"
+      },
+      "title": "说明"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": { "node": "n1", "port": "positive" }, "to": { "node": "n4", "port": "text" } },
+    { "id": "e2", "from": { "node": "n1", "port": "negative" }, "to": { "node": "n5", "port": "text" } },
+    { "id": "e3", "from": { "node": "n2", "port": "clip" }, "to": { "node": "n4", "port": "clip" } },
+    { "id": "e4", "from": { "node": "n2", "port": "clip" }, "to": { "node": "n5", "port": "clip" } },
+    { "id": "e5", "from": { "node": "n2", "port": "model" }, "to": { "node": "n7", "port": "model" } },
+    { "id": "e6", "from": { "node": "n2", "port": "vae" }, "to": { "node": "n8", "port": "vae" } },
+    { "id": "e7", "from": { "node": "n3", "port": "width" }, "to": { "node": "n6", "port": "width" } },
+    { "id": "e8", "from": { "node": "n3", "port": "height" }, "to": { "node": "n6", "port": "height" } },
+    { "id": "e9", "from": { "node": "n4", "port": "conditioning" }, "to": { "node": "n7", "port": "positive" } },
+    { "id": "e10", "from": { "node": "n5", "port": "conditioning" }, "to": { "node": "n7", "port": "negative" } },
+    { "id": "e11", "from": { "node": "n6", "port": "latent" }, "to": { "node": "n7", "port": "latent" } },
+    { "id": "e12", "from": { "node": "n7", "port": "image" }, "to": { "node": "n8", "port": "image" } },
+    { "id": "e13", "from": { "node": "n8", "port": "image" }, "to": { "node": "n9", "port": "image" } }
+  ]
+}
