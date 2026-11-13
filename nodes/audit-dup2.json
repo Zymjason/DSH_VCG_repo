@@ -4,7 +4,8 @@
   "nameZh": "本地权重检查器",
   "category": "utility",
   "order": 210,
-  "description": "专业模式本地节点：调用本地 PyTorch/safetensors 读取 .safetensors/.ckpt/.pt 权重元数据（张量名、dtype、形状、数量与文件大小），不联网、不消耗 token。需先在「设置 → 本地工具与模型」安装 PyTorch 与 safetensors。",
+  "description": "audit retry",
+  "xDescription": "专业模式本地节点：调用本地 PyTorch/safetensors 读取 .safetensors/.ckpt/.pt 权重元数据（张量名、dtype、形状、数量与文件大小），不联网、不消耗 token。需先在「设置 → 本地工具与模型」安装 PyTorch 与 safetensors。",
   "engine": "local",
   "inputs": [],
   "outputs": [
