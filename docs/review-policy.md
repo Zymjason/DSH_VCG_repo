@@ -71,7 +71,7 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
    - 解析 `type` / `files` / `submitter` / `supersedes`；
    - 校验路径与类型匹配（node 只允许 1 个 `nodes/*.json`；workflow 只允许 1 个 `workflows/*.json`）；
    - 复用 `scripts/lib/validate-core.mjs` 做结构与规范校验（与 `node scripts/validate.mjs` 同规则）；
-   - 跨分支重复检测（对比 `main`/`dev`/`bug`/`recheck` 的 id、文件名、内容 sha256；普通 PR 命中 `main`/`dev` 即 error，命中 `bug`/`recheck` 留档仅 warning）；
+   - 跨分支重复检测（对比 `main`/`dev`/`bug`/`recheck` 的 id、文件名、内容 sha256；普通 PR 与 `main`/`dev` **内容完全相同**即 error；同 id/文件名但内容不同视为更新、仅 warning 交人工审查；`bug`/`recheck` 留档命中仅 warning）；
    - `models[]` 声明安全审计（见 §6）；
    - 评论 Markdown 报告；打 `audit:passed` 或 `audit:failed`。
 3. **审计失败**：文件复制到 `bug` 分支，PR 保持打开。投稿者修正后在同一 PR push 新提交，
@@ -106,12 +106,13 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
   ports、params、连线、悬空必需输入、环、manifest 一致性等）；
 - `models[]` 硬错误：`filename` 缺失/含路径分隔符或 `..`、`url` 缺失或非法 URL、`format` 缺失或不在
   `safetensors|ckpt|pt|pth|bin|gguf`、`size` 非正整数、`sha256` 非 64 位 hex；
-- **跨分支重复（普通 PR）**：提交的 id / 文件名 / 内容 sha256 与 `main`/`dev` 已有内容相同
-  （或 id、文件名已存在）→ **error**，报告逐项列出 `分支 / 文件 / id / sha256`，CI 打
-  `audit:failed` 并把文件打回 `bug` 分支。这是 §16.1 的“自动审核重复提交/重复内容”要求，
-  普通 PR 不再放行与正式分支重复的内容。
-- **命中 `bug`/`recheck` 留档的重复**：只提示 warning，不阻断——否则审计失败被打回后，
-  修正版本将永远无法重新提交。
+- **重复提交 / 重复内容（普通 PR）**：提交的文件内容与 `main`/`dev` 已有文件**完全相同**
+  （sha256 一致）→ **error**，报告逐项列出 `分支 / 文件 / id / sha256`，CI 打 `audit:failed`
+  并把文件打回 `bug` 分支。这是 §16.1 的“自动审核重复提交/重复内容”要求。
+- **更新已有节点/工作流**：id 或文件名已存在于 `main`/`dev` 但内容不同 → 仅 warning
+  （“更新已有内容，交人工审查”），不阻断正常维护与迭代。
+- **命中 `bug`/`recheck` 留档**：只提示 warning，不阻断——否则审计失败被打回后，修正版本
+  将永远无法重新提交。
 
 仅警告（**不阻止上传**，报告列出）：
 
@@ -120,8 +121,8 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
   复核本来就是把已有内容移入 `recheck`，因此重复只提示不阻断；
 - 缺失对比分支、非 git 仓库等降级提示。
 
-> 重复检查对正式分支（`main`/`dev`）零容忍；`bug`/`recheck` 只是失败与复核留档，命中时仅
-> warning，因此修正后可以正常重新提交（建议带 `supersedes: #N` 引用旧 PR）。
+> 重复检查只针对“内容完全相同”的重复提交；更新已有节点/工作流（同 id、内容不同）只提示，
+> `bug`/`recheck` 留档命中也不阻断，因此修正后可以正常重新提交（建议带 `supersedes: #N`）。
 
 模型声明规范见 `docs/node-spec.md` §12、`docs/workflow-spec.md` §8；可信源清单见根目录
 `trusted-sources.json`，由维护者审核更新。
@@ -226,9 +227,10 @@ node scripts/sync-mirrors.mjs --source . --target /tmp/mirror.git --dry-run
    `.gitea/workflows/*` 未指定 `types` 而是在 step 里过滤 `github.event.action`；
    `vars` 上下文在较旧 Gitea 不可用，此时改用文件中的默认值。Gitea 实例若无法拉取
    `actions/checkout`，可把 checkout step 换成 `git clone`（见下方片段）。
-4. **重复只对正式分支阻断**：普通 PR 命中 `main`/`dev` 的 id/文件名/内容 sha256 重复会 error
-   并打回 `bug`；命中 `bug`/`recheck` 留档仅 warning，因此修正后可直接在新 PR 重新提交。
-   Issue 复核流程仍显式使用 `--allow-duplicates`（天然与已有内容重复）。
+4. **重复只阻断“完全相同”的内容**：普通 PR 与 `main`/`dev` 内容 sha256 完全相同才 error 并
+   打回 `bug`；同 id/文件名但内容不同视为更新（warning，交人工审查）；`bug`/`recheck`
+   留档命中仅 warning，因此修正后可直接在新 PR 重新提交。Issue 复核流程仍显式使用
+   `--allow-duplicates`（天然与已有内容重复）。
 5. **分叉/领先的镜像分支会被跳过**：为了不覆盖对端多出的提交，`diverged` 与 `target-ahead`
    只报告不推送；需要强制收敛时手动在目标端处理或使用 `--force-diverged`（谨慎）。
 6. **tag 比较基于 tag 引用 sha**（annotated tag 为 tag 对象 sha），不比较 peeled commit；

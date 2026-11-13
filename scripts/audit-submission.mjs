@@ -780,13 +780,18 @@ async function main() {
         // main/dev 是待并入的正式分支：重复提交 / 重复内容直接打回；
         // bug/recheck 只是失败与复核留档，不能反过来阻断修正后的重新提交。
         const blockingRefs = ['main', 'dev']
-        const blocking = duplicates.filter((entry) => blockingRefs.includes(entry.ref))
+        // 完全相同的文件内容 = 重复提交/重复内容 → 打回；
+        // 同 id / 文件名但内容不同 = 更新已有节点（属正常维护，交人工审查，不阻断）；
+        // bug/recheck 只是失败与复核留档，命中不阻断。
+        const blocking = duplicates.filter((entry) => blockingRefs.includes(entry.ref) && entry.sameContent)
+        const updates = duplicates.filter((entry) => blockingRefs.includes(entry.ref) && !entry.sameContent)
         const archived = duplicates.filter((entry) => !blockingRefs.includes(entry.ref))
         if (allowDuplicates) {
           // Issue 复核（recheck）场景：引用内容本来就来自已有分支，重复只提示
           for (const entry of duplicates) warnings.push(`${duplicateDetail(entry)}（仅警告：--allow-duplicates）`)
         } else {
-          for (const entry of blocking) errors.push(`跨分支重复（自动审计不通过）：${duplicateDetail(entry)}`)
+          for (const entry of blocking) errors.push(`重复提交/重复内容（自动审计不通过）：${duplicateDetail(entry)}`)
+          for (const entry of updates) warnings.push(`${duplicateDetail(entry)}（更新已有内容，内容不同，交人工审查）`)
           for (const entry of archived) warnings.push(`${duplicateDetail(entry)}（留档分支，仅警告）`)
         }
       }

@@ -100,7 +100,7 @@ node scripts/audit-submission.mjs \
    - 结果（通过 / 未通过）；
    - 文件 sha256、结构校验结果；
    - 错误（必须修复）与警告（仅提示）；
-   - 跨分支重复（`main`/`dev`/`bug`/`recheck`；普通 PR 命中 `main`/`dev` 即 **error** 打回 `bug`，命中 `bug`/`recheck` 留档仅 warning）；
+   - 跨分支重复（`main`/`dev`/`bug`/`recheck`；普通 PR 与 `main`/`dev` **内容完全相同**即 **error** 打回 `bug`；同 id/文件名但内容不同视为更新仅 warning；`bug`/`recheck` 留档仅 warning）；
    - `models[]` 的可信源/完整性信息。
    
 
@@ -145,8 +145,9 @@ node scripts/audit-submission.mjs \
 - 按评论里的 **错误** 逐条修复（不要只改评论里没提的字段），本地跑
   `node scripts/validate.mjs` 确认后，在**同一个 PR 分支**继续 `git push`：
   CI 收到 `synchronize` 事件后重新审计并更新评论。
-- 注意：普通 PR 中命中 **`main`/`dev` 的跨分支重复即 error**（id / 文件名 / 内容 sha256）。
-  `bug`/`recheck` 只是失败与复核留档，命中时仅 warning，因此修正后可在新 PR 重新提交；
+- 注意：普通 PR 中与 **`main`/`dev` 内容完全相同即 error**（重复提交/重复内容）；同 id/文件名
+  但内容不同视为更新，仅 warning 交人工审查。`bug`/`recheck` 只是留档，命中时仅 warning，
+  因此修正后可在新 PR 重新提交；
   **Issue 复核流程**（§9，自动 `--allow-duplicates`），或先与维护者确认清理 `bug` 留档。
 - 常见错误速查：
 
@@ -163,7 +164,7 @@ node scripts/audit-submission.mjs \
 | `models[x].filename ...` | 去掉路径分隔符/`..`，只保留纯文件名 |
 | `models[x].format 非法` | 改用 `safetensors|ckpt|pt|pth|bin|gguf` |
 | `models[x].sha256 必须是 64 位...` | 修正为 64 位 hex（`sha256sum 文件` 获取） |
-| `跨分支重复（自动审计不通过）` | 普通 PR 不允许与 `main`/`dev` 重复提交/重复内容：确认 id、文件名、内容（sha256）未与正式分支相同；`bug`/`recheck` 留档重复仅 warning |
+| `重复提交/重复内容（自动审计不通过）` | 普通 PR 不允许与 `main`/`dev` 内容完全相同：确认内容 sha256 未与正式分支相同；更新已有节点（同 id、内容不同）只警告；`bug`/`recheck` 留档重复仅 warning |
 
 ## 8. 重新提交与 supersedes
 
