@@ -169,8 +169,14 @@ async function gitAllowFail(cwd, args, options) {
 }
 
 async function resolveCommit(cwd, ref) {
-  const output = await gitAllowFail(cwd, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
-  return output && output.trim() ? output.trim() : null
+  // CI 里只 fetch 出 origin/*（没有本地分支），因此按本地 → origin → refs/remotes 依次解析。
+  const candidates = [ref, `origin/${ref}`, `refs/remotes/origin/${ref}`]
+  for (const candidate of candidates) {
+    if (String(candidate).startsWith('refs/heads/')) continue
+    const output = await gitAllowFail(cwd, ['rev-parse', '--verify', '--quiet', `${candidate}^{commit}`])
+    if (output && output.trim()) return output.trim()
+  }
+  return null
 }
 
 async function readFromWorktree(repoRoot, file) {
