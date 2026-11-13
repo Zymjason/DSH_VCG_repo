@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "nodes": [
     "prompt-input",
     "text-input",
@@ -16,7 +16,8 @@
     "text-output",
     "note",
     "example-node",
-    "local-safetensors-inspect"
+    "local-safetensors-inspect",
+    "audit-smoke-check"
   ],
   "workflows": [
     "wf-txt2img",
