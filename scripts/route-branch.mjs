@@ -272,14 +272,30 @@ async function commitToBranch({ repoRoot, target, baseCommit, isNewBranch, files
     }
 
     const lease = isNewBranch ? `--force-with-lease=refs/heads/${target}:` : `--force-with-lease=refs/heads/${target}:${baseCommit}`
+    const pushRefspec = `${commit}:refs/heads/${target}`
     try {
-      await git(repoRoot, ['push', lease, remote, `${commit}:refs/heads/${target}`], { env })
-      result.pushed = true
-      if (isNewBranch) await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit])
-      else await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit, baseCommit])
+      await git(repoRoot, ['push', lease, remote, pushRefspec], { env })
     } catch (error) {
-      result.errors.push(`push 到 ${remote} ${target} 失败: ${sanitizeText(error.message)}`)
+      const detail = sanitizeText(error.message)
+      // 部分 CI 远端（如 GitHub Actions 里的 origin）在只 fetch origin/* 时
+      // 对 --force-with-lease 的期望值解析异常（cannot lock ref / unable to resolve reference），
+      // 目标分支没有本地引用时改用普通 push 重试一次（仍是快进，不会丢提交）。
+      if (/cannot lock ref|unable to resolve reference|stale info/i.test(detail)) {
+        try {
+          await git(repoRoot, ['push', remote, pushRefspec], { env })
+          result.warnings.push('--force-with-lease 解析失败，已改用普通 push 重试成功')
+        } catch (retryError) {
+          result.errors.push(`push 到 ${remote} ${target} 失败: ${sanitizeText(retryError.message)}`)
+          return result
+        }
+      } else {
+        result.errors.push(`push 到 ${remote} ${target} 失败: ${detail}`)
+        return result
+      }
     }
+    result.pushed = true
+    if (isNewBranch) await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit])
+    else await git(repoRoot, ['update-ref', `refs/heads/${target}`, commit, baseCommit])
   } catch (error) {
     result.errors.push(`在 ${target} 上创建提交失败: ${sanitizeText(error.message)}`)
   } finally {
