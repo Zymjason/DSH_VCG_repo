@@ -1,0 +1,309 @@
+name: audit-pr
+
+# CONTRACT §16.1（Gitea Actions 等价实现）。
+# 与 .github/workflows/audit-pr.yml 逻辑一致，区别：
+#   - 标签/评论/合并/关闭 PR 全部用 curl 调 Gitea API（Authorization: token <token>）
+#   - Gitea API 合并 PR 用 POST /pulls/{index}/merge，payload {"Do":"merge"}
+#   - 不指定 pull_request types（不同 Gitea 版本事件名不同），在 step 里用 github.event.action 过滤
+# 注意：Gitea 仓库需配置 secrets.GITEA_TOKEN（或使用默认 github.token，需有 repo 写权限）。
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: audit-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    if: >-
+      github.event.action != 'labeled'
+      || github.event.label.name == 'status:approved'
+      || github.event.label.name == 'status:rejected'
+    runs-on: ubuntu-latest
+    env:
+      API: ${{ github.api_url }}
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      PR: ${{ github.event.pull_request.number }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      EVENT_ACTION: ${{ github.event.action }}
+      EVENT_LABEL: ${{ github.event.label.name }}
+      TOKEN: ${{ secrets.GITEA_TOKEN }}
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Resolve API base and git identity
+        run: |
+          set -euo pipefail
+          API_URL="${GITHUB_API_URL:-}"
+          if [ -z "$API_URL" ]; then API_URL="${GITHUB_SERVER_URL%/}/api/v1"; fi
+          echo "API=$API_URL" >> "$GITHUB_ENV"
+          if [ -z "${TOKEN:-}" ]; then echo "TOKEN=$GITHUB_TOKEN" >> "$GITHUB_ENV"; fi
+          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+          git fetch --tags --force origin
+          HEAD_SHA="${HEAD_SHA:-$(git rev-parse HEAD)}"
+          BASE_SHA="${BASE_SHA:-$(git rev-parse "origin/${BASE_REF}")}"
+          echo "HEAD_SHA=$HEAD_SHA" >> "$GITHUB_ENV"
+          echo "BASE_SHA=$BASE_SHA" >> "$GITHUB_ENV"
+          git config user.name 'vcg-audit-bot'
+          git config user.email 'vcg-audit-bot@users.noreply.github.com'
+
+      - name: Prepare trusted scripts (base branch version)
+        id: scripts
+        run: |
+          set -euo pipefail
+          BASE_SHA="${BASE_SHA:-$(git rev-parse "origin/${BASE_REF}")}"
+          AUDIT='scripts/audit-submission.mjs'
+          ROUTE='scripts/route-branch.mjs'
+          TRUSTED='trusted-sources.json'
+          rm -rf /tmp/vcg-base
+          if git worktree add --detach /tmp/vcg-base "$BASE_SHA" >/dev/null 2>&1; then
+            if [ -f /tmp/vcg-base/scripts/audit-submission.mjs ]; then
+              AUDIT='/tmp/vcg-base/scripts/audit-submission.mjs'
+              [ -f /tmp/vcg-base/scripts/route-branch.mjs ] && ROUTE='/tmp/vcg-base/scripts/route-branch.mjs'
+              [ -f /tmp/vcg-base/trusted-sources.json ] && TRUSTED='/tmp/vcg-base/trusted-sources.json'
+            fi
+          fi
+          {
+            echo "audit=$AUDIT"
+            echo "route=$ROUTE"
+            echo "trusted=$TRUSTED"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run submission audit
+        id: audit
+        if: github.event.action != 'labeled'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set +e
+          FILES=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" | paste -sd, -)
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          node "${{ steps.scripts.outputs.audit }}" \
+            --files "$FILES" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --trusted "${{ steps.scripts.outputs.trusted }}" \
+            --author "$PR_AUTHOR" --pr "$PR" --base-ref "$BASE_REF" --commit "$HEAD_SHA" \
+            --json-out audit-report.json --md-out audit-comment.md > audit-console.txt 2>&1
+          CODE=$?
+          set -e
+          cat audit-console.txt || true
+          OK=$(node -e 'try{const r=require("./audit-report.json");process.stdout.write(r.ok?"true":"false")}catch(e){process.stdout.write("false")}' 2>/dev/null | tail -1)
+          echo "ok=${OK:-false}" >> "$GITHUB_OUTPUT"
+          echo "exit=$CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Post or update audit comment
+        if: steps.audit.outcome == 'success' && github.event.action != 'labeled'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: token $TOKEN"
+              -H "Accept: application/json" -H "User-Agent: vcg-audit-bot"
+              -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          node -e 'const fs=require("fs");fs.writeFileSync("/tmp/comment.json",JSON.stringify({body:fs.readFileSync("audit-comment.md","utf8")}))'
+          CODE=$(api GET "/repos/$REPO/issues/$PR/comments" "" /tmp/comments.json)
+          ID=''
+          if [ "$CODE" = "200" ]; then
+            ID=$(node -e '
+              const fs=require("fs");
+              const list=JSON.parse(fs.readFileSync("/tmp/comments.json","utf8"));
+              const arr=Array.isArray(list)?list:[];
+              const hit=arr.find((c)=>typeof c.body==="string" && c.body.includes("<!-- vcg-audit-report -->"));
+              process.stdout.write(hit?String(hit.id):"");
+            ')
+          fi
+          if [ -n "$ID" ]; then
+            CODE=$(api PATCH "/repos/$REPO/issues/comments/$ID" /tmp/comment.json)
+            [ "$CODE" = "200" ] || { cat /tmp/api.json; echo "::warning::更新审计评论失败 HTTP $CODE"; exit 0; }
+          else
+            CODE=$(api POST "/repos/$REPO/issues/$PR/comments" /tmp/comment.json)
+            [ "$CODE" = "201" ] || { cat /tmp/api.json; echo "::warning::发表审计评论失败 HTTP $CODE"; exit 0; }
+          fi
+
+      - name: Update audit result label
+        if: steps.audit.outcome == 'success' && github.event.action != 'labeled'
+        continue-on-error: true
+        env:
+          AUDIT_OK: ${{ steps.audit.outputs.ok }}
+        run: |
+          set -euo pipefail
+          if [ "$AUDIT_OK" = "true" ]; then
+            WANT_LABEL='audit:passed'; LABEL_COLOR='#0e8a16'; LABEL_DESC='自动审计通过'
+          else
+            WANT_LABEL='audit:failed'; LABEL_COLOR='#b60205'; LABEL_DESC='自动审计未通过（文件已复制到 bug 分支，PR 保持打开）'
+          fi
+          export WANT_LABEL LABEL_COLOR LABEL_DESC
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: token $TOKEN"
+              -H "Accept: application/json" -H "User-Agent: vcg-audit-bot" -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          api GET "/repos/$REPO/issues/$PR/labels" "" /tmp/labels.json >/dev/null || true
+          node -e '
+            const fs=require("fs");
+            let current=[];
+            try { current=JSON.parse(fs.readFileSync("/tmp/labels.json","utf8")).map((l)=>l.name); } catch (e) { current=[]; }
+            const kept=current.filter((name)=>!name.startsWith("audit:"));
+            fs.writeFileSync("/tmp/labels-put.json",JSON.stringify({labels:[...new Set([...kept,process.env.WANT_LABEL])]}));
+            fs.writeFileSync("/tmp/label-create.json",JSON.stringify({name:process.env.WANT_LABEL,color:process.env.LABEL_COLOR,description:process.env.LABEL_DESC}));
+          '
+          CODE=$(api PUT "/repos/$REPO/issues/$PR/labels" /tmp/labels-put.json)
+          if [ "$CODE" -ge 300 ] 2>/dev/null; then
+            api POST "/repos/$REPO/labels" /tmp/label-create.json >/dev/null || true
+            CODE=$(api PUT "/repos/$REPO/issues/$PR/labels" /tmp/labels-put.json)
+          fi
+          [ "$CODE" -lt 300 ] 2>/dev/null || { cat /tmp/api.json; echo "::warning::更新 audit 标签失败 HTTP $CODE"; }
+
+      - name: Route failed audit to bug branch
+        if: steps.audit.outcome == 'success' && steps.audit.outputs.ok != 'true' && github.event.action != 'labeled'
+        run: |
+          set -euo pipefail
+          FILES="${{ steps.audit.outputs.files }}"
+          ROUTE="${{ steps.scripts.outputs.route }}"
+          [ -n "$FILES" ] || { echo "::warning::没有可路由的文件"; exit 0; }
+          node "$ROUTE" --target bug --files "$FILES" --ref "$HEAD_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" --remote origin \
+            --reason "audit failed for PR #$PR" --json-out route-bug.json \
+            || echo "::warning::复制到 bug 分支失败（检查 token 权限）"
+
+      - name: Handle supersedes PR
+        if: steps.audit.outcome == 'success' && github.event.action != 'labeled'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          SUPERSEDES=$(node -e 'try{const r=require("./audit-report.json");process.stdout.write(String(r.declaration.supersedes||""))}catch(e){}' 2>/dev/null | tail -1)
+          [ -n "$SUPERSEDES" ] || exit 0
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: token $TOKEN"
+              -H "Accept: application/json" -H "User-Agent: vcg-audit-bot" -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          post() {
+            MSG="$1" node -e 'const fs=require("fs");fs.writeFileSync("/tmp/c.json",JSON.stringify({body:process.env.MSG}))'
+            api POST "/repos/$REPO/issues/$2/comments" /tmp/c.json >/dev/null 2>&1 || true
+          }
+          CODE=$(api GET "/repos/$REPO/pulls/$SUPERSEDES" "" /tmp/old-pr.json)
+          if [ "$CODE" != "200" ]; then
+            post "### supersedes 校验失败"$'\n\n'"无法读取被替代的 PR #$SUPERSEDES（HTTP $CODE），请检查编号。" "$PR"
+            exit 0
+          fi
+          VERDICT=$(node -e '
+            const fs=require("fs");
+            const pr=JSON.parse(fs.readFileSync("/tmp/old-pr.json","utf8"));
+            const want=String(process.env.PR_AUTHOR||"").toLowerCase();
+            const author=String(pr.user&&pr.user.login||"").toLowerCase();
+            const merged=Boolean(pr.merged||pr.merged_at);
+            const open=pr.state==="open";
+            const problems=[];
+            if(!author || author!==want) problems.push(`#${pr.number} 作者是 @${author||"?"}，与当前 PR 作者 @${want} 不一致`);
+            if(merged) problems.push(`#${pr.number} 已经合并，不能再被 supersede`);
+            if(!open) problems.push(`#${pr.number} 状态是 ${pr.state}，必须是 open`);
+            process.stdout.write(problems.length?`fail:${problems.join("；")}`:"ok");
+          ' | tail -1)
+          if [ "$VERDICT" = "ok" ]; then
+            post "### 已关闭旧 PR #$SUPERSEDES"$'\n\n'"本 PR 声明 \`supersedes: #$SUPERSEDES\`，审计通过，已自动关闭旧 PR。" "$SUPERSEDES"
+            node -e 'const fs=require("fs");fs.writeFileSync("/tmp/close.json",JSON.stringify({state:"closed"}))'
+            api PATCH "/repos/$REPO/pulls/$SUPERSEDES" /tmp/close.json >/dev/null || true
+            post "✅ 已关闭被替代的旧 PR #$SUPERSEDES。" "$PR"
+          else
+            post "### supersedes 校验失败"$'\n\n'"${VERDICT#fail:}" "$PR"
+          fi
+
+      - name: Approve and merge to main
+        if: github.event.action == 'labeled' && github.event.label.name == 'status:approved'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: token $TOKEN"
+              -H "Accept: application/json" -H "User-Agent: vcg-audit-bot" -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          comment() {
+            MSG="$1" node -e 'const fs=require("fs");fs.writeFileSync("/tmp/c.json",JSON.stringify({body:process.env.MSG}))'
+            api POST "/repos/$REPO/issues/$PR/comments" /tmp/c.json >/dev/null 2>&1 || true
+          }
+          CODE=$(api GET "/repos/$REPO/pulls/$PR" "" /tmp/pr.json)
+          [ "$CODE" = "200" ] || { echo "::error::无法读取 PR #$PR"; exit 1; }
+          STATE=$(node -e 'const p=require("/tmp/pr.json");process.stdout.write((p.merged||p.merged_at)?"merged":p.state)' 2>/dev/null | tail -1)
+          if [ "$STATE" = "merged" ]; then comment "该 PR 已合并，跳过 status:approved 处理。"; exit 0; fi
+          if [ "$STATE" != "open" ]; then comment "该 PR 状态为 $STATE，无法合并到 dev。"; exit 1; fi
+          node -e 'const fs=require("fs");fs.writeFileSync("/tmp/merge.json",JSON.stringify({Do:"merge"}))'
+          CODE=$(api POST "/repos/$REPO/pulls/$PR/merge" /tmp/merge.json)
+          if [ "$CODE" = "200" ]; then
+            comment "✅ 已合并到 dev，继续把 dev 合并到 main。"
+          else
+            comment "status:approved 但合并到 dev 失败（HTTP $CODE）。请确认分支保护/合并权限，见 docs/review-policy.md。"
+            cat /tmp/api.json; exit 1
+          fi
+          CODE=$(api GET "/repos/$REPO/pulls?state=open&limit=50" "" /tmp/pulls.json)
+          MAIN_PR=$(node -e '
+            try { const list=require("/tmp/pulls.json"); const arr=Array.isArray(list)?list:[]; const hit=arr.find((p)=>p.base&&p.base.ref==="main"&&p.head&&p.head.ref==="dev"); process.stdout.write(hit?String(hit.number):""); } catch(e) { process.stdout.write(""); }
+          ' 2>/dev/null | tail -1)
+          if [ -z "$MAIN_PR" ]; then
+            node -e 'const fs=require("fs");fs.writeFileSync("/tmp/newmain.json",JSON.stringify({title:"chore: merge dev into main (status:approved)",head:"dev",base:"main",body:`由 status:approved 流程自动创建（来源 PR #${process.env.PR}）。`}))'
+            CODE=$(api POST "/repos/$REPO/pulls" /tmp/newmain.json)
+            if [ "$CODE" = "201" ]; then
+              MAIN_PR=$(node -e 'const fs=require("fs");process.stdout.write(String(JSON.parse(fs.readFileSync("/tmp/api.json","utf8")).number))' 2>/dev/null | tail -1)
+            elif [ "$CODE" = "409" ] || [ "$CODE" = "422" ]; then
+              comment "dev 与 main 没有可合并的差异（HTTP $CODE），无需合并。"; exit 0
+            else
+              comment "创建 dev→main 合并 PR 失败（HTTP $CODE）。请人工合并 dev 到 main，见 docs/review-policy.md。"
+              cat /tmp/api.json; exit 1
+            fi
+          fi
+          CODE=$(api POST "/repos/$REPO/pulls/$MAIN_PR/merge" /tmp/merge.json)
+          if [ "$CODE" = "200" ]; then
+            comment "✅ status:approved 流程完成：PR #$PR 已并入 dev，dev 已合并到 main（合并 PR #$MAIN_PR）。"
+          else
+            comment "PR #$PR 已并入 dev，但 dev→main 合并失败（HTTP $CODE）。请人工合并 dev 到 main。"
+            cat /tmp/api.json; exit 1
+          fi
+
+      - name: Reject and route to bug
+        if: github.event.action == 'labeled' && github.event.label.name == 'status:rejected'
+        run: |
+          set -euo pipefail
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: token $TOKEN"
+              -H "Accept: application/json" -H "User-Agent: vcg-audit-bot" -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          FILES=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" | paste -sd, -)
+          ROUTE="${{ steps.scripts.outputs.route }}"
+          if [ -n "$FILES" ]; then
+            node "$ROUTE" --target bug --files "$FILES" --ref "$HEAD_SHA" \
+              --repo-root "$GITHUB_WORKSPACE" --remote origin \
+              --reason "manual status:rejected for PR #$PR" --json-out route-bug.json \
+              || echo "::warning::复制到 bug 分支失败"
+          fi
+          export MSG="人工审查未通过（status:rejected）：文件已复制到 bug 分支，PR 保持打开。修改后 push 新提交会自动重新审计。"
+          node -e 'const fs=require("fs");fs.writeFileSync("/tmp/c.json",JSON.stringify({body:process.env.MSG}))'
+          api POST "/repos/$REPO/issues/$PR/comments" /tmp/c.json >/dev/null || true

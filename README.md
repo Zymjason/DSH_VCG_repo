@@ -7,7 +7,8 @@
 
 - 插件内置副本 `DSH_VCG/nodes/*.json` 与 `DSH_VCG/workflows/*.json` 必须与本仓库对应文件**字节一致**（`node scripts/validate.mjs` 会校验）。
 - 本仓库只包含数据（JSON）与规范文档，不含可执行插件代码；所有执行器由插件的 Host 半部分实现（契约 §4）。
-- 节点 / 工作流文件遵循 `DSH_VCG/CONTRACT.md` §1、§2、§3、§11 的 schema。
+- 节点 / 工作流文件遵循 `DSH_VCG/CONTRACT.md` §1、§2、§3、§11 的 schema；推荐模型声明见 §16.3 与 `docs/node-spec.md` §12。
+- **所有上传只能走 Pull Request**：自动审计 + 人工审查通过后才进入 `main`；未审核进 `dev`、打回进 `bug`、issue 复核进 `recheck`。流程见 [docs/review-policy.md](docs/review-policy.md)，提交方法见 [docs/submission.md](docs/submission.md)。
 
 ## 目录结构
 
@@ -22,8 +23,16 @@ DSH_VCG_repo/
 │   ├── workflow-spec.md      工作流规范与执行语义
 │   ├── cloud-api.md          云端 API 适配说明
 │   └── comfyui-compat.md     本地 ComfyUI 映射与限制
+├── trusted-sources.json      可信模型下载源清单（客户端下载前比对）
+├── assets/                   示例权重（1KB safetensors，供本地检查节点演示）
 ├── sdk/loader.md             如何从本仓库拉取节点包（raw URL / manifest 约定）
-└── scripts/validate.mjs      零依赖校验器（node scripts/validate.mjs）
+├── scripts/
+│   ├── validate.mjs          零依赖校验器（node scripts/validate.mjs）
+│   ├── audit-submission.mjs  PR/Issue 提交审计（类型/规范/重复/模型来源）
+│   ├── route-branch.mjs      按审计结果移动文件到 dev/bug/recheck
+│   └── sync-mirrors.mjs      GitHub ↔ Gitea 全分支/tag 镜像同步
+├── .github/workflows/        PR/Issue 审计 + 每日 22:00（北京）镜像同步
+└── .gitea/workflows/         Gitea Actions 等价自动化
 ```
 
 ## 快速开始
@@ -37,7 +46,20 @@ cd DSH_VCG_repo
 node scripts/validate.mjs     # 退出码 0 = 通过
 ```
 
-校验内容：JSON 可解析、节点 id 唯一且与文件名一致、schema 字段完整、param 默认值类型与取值范围、`executor.fn` 合法、ComfyUI `map` 引用存在、manifest 与目录一一对应、工作流引用的节点类型都存在、每条边端口存在且类型兼容、必需输入不悬空、无环、`DSH_VCG/nodes` 与 `DSH_VCG/workflows` 字节一致。
+校验内容：JSON 可解析、节点 id 唯一且与文件名一致、schema 字段完整、param 默认值类型与取值范围、`executor.fn` 合法（含本地 `safetensorsInspect`）、ComfyUI `map` 引用存在、`models[]` 声明安全（https/文件名/格式/sha256/可信源，仅警告）、manifest 与目录一一对应、工作流引用的节点类型都存在、每条边端口存在且类型兼容、必需输入不悬空、无环、`DSH_VCG/nodes` 与 `DSH_VCG/workflows` 字节一致。
+
+## 上传审计与分支流程
+
+| 分支 | 含义 |
+|---|---|
+| `main` | 人工审核通过，客户端默认只显示该分支 |
+| `dev` | 已提交、待审核（PR 目标分支） |
+| `bug` | 审计或人工审查不通过（打回；PR 保持打开可重新提交） |
+| `recheck` | Issue 问题报告触发的复核队列 |
+
+提交方式：fork/分支 → 按 PR 模板声明 `type: node|workflow`、`files`、`submitter`（重新提交加 `supersedes: #旧PR`）→ CI 自动审计并评论报告。审计检查文件类型/路径、节点或工作流规范、跨分支重复（相同 id/文件/内容 sha256 直接打回）、模型来源安全（不可信源/缺 sha256/非 https 仅警告，不阻止上传）。人工添加 `status:approved` 后自动进入 `main`；`status:rejected` 进入 `bug`。
+
+下载安全：节点/工作流可声明 `models[]`（见 `docs/node-spec.md` §12）；客户端下载前会与根目录 `trusted-sources.json` 比对，非权威来源弹窗警告并要求二次确认。
 
 **修改后同步到插件内置副本**：
 

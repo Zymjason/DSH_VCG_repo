@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-13T10:30:00.000Z",
+  "hosts": [
+    {
+      "host": "huggingface.co",
+      "name": "Hugging Face",
+      "trusted": true,
+      "note": "模型权重/数据集主页；下载请核对 models[].sha256"
+    },
+    {
+      "host": "modelscope.cn",
+      "name": "ModelScope",
+      "trusted": true,
+      "note": "魔搭社区；中国大陆网络可用"
+    },
+    {
+      "host": "civitai.com",
+      "name": "Civitai",
+      "trusted": true,
+      "note": "社区模型站；下载需登录的链接请改用直链"
+    },
+    {
+      "host": "github.com",
+      "name": "GitHub Releases",
+      "trusted": true,
+      "note": "仓库发布产物（含本仓库 assets/ 示例权重）"
+    }
+  ]
+}

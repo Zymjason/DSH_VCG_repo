@@ -1,0 +1,55 @@
+name: sync-gitea
+
+# CONTRACT §16.2：每天 22:00 Asia/Shanghai（cron 0 14 * * * UTC）把 GitHub 仓库的
+# 所有分支与 tag 同步到 Gitea（GitHub → Gitea），使用 secrets.GITEA_TOKEN。
+# 同步逻辑在 scripts/sync-mirrors.mjs：目标缺失或落后才 push --force-with-lease，
+# 分叉/目标领先的分支跳过（由 gitea 侧 sync-github 反向同步），单个失败不阻塞其它。
+
+on:
+  schedule:
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-gitea
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Mirror GitHub to Gitea (all branches + tags)
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_HOST: ${{ vars.GITEA_HOST }}
+          GITEA_OWNER: ${{ vars.GITEA_OWNER }}
+          GITEA_REPO: ${{ vars.GITEA_REPO }}
+          GITEA_USER: ${{ vars.GITEA_USER }}
+          SOURCE_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          HOST="${GITEA_HOST:-gitea.com}"
+          OWNER="${GITEA_OWNER:-ZymJason_DSH}"
+          REPO="${GITEA_REPO:-DSH_VCG_repo}"
+          GUSER="${GITEA_USER:-$OWNER}"
+          if [ -z "${GITEA_TOKEN:-}" ]; then
+            echo "::error::缺少 secrets.GITEA_TOKEN。请到 Settings → Secrets and variables → Actions 添加（见 docs/review-policy.md）。"
+            exit 1
+          fi
+          SOURCE_HOST="${GITHUB_SERVER_URL#https://}"
+          SOURCE_URL="https://x-access-token:${SOURCE_TOKEN}@${SOURCE_HOST}/${GITHUB_REPOSITORY}.git"
+          TARGET_URL="https://${GUSER}:${GITEA_TOKEN}@${HOST}/${OWNER}/${REPO}.git"
+          node scripts/sync-mirrors.mjs \
+            --source "$SOURCE_URL" \
+            --target "$TARGET_URL" \
+            --json-out sync-report.json
+          echo "同步报告已生成: sync-report.json（摘要见上方日志）"

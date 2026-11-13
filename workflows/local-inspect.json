@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "id": "wf-local-inspect",
+  "name": "本地权重检查示例",
+  "description": "本地 PyTorch 工具示例：下载 VCG 示例权重（约 1KB，GitHub 可信源）→ 本地权重检查器读取张量元数据 → 文本输出。需要打开专业模式并安装本地工具；不调用云端 API、不消耗 token。",
+  "createdAt": "2026-11-13T10:00:00.000Z",
+  "updatedAt": "2026-11-13T10:00:00.000Z",
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "scale": 1
+  },
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "local-safetensors-inspect",
+      "x": 120,
+      "y": 140,
+      "params": {
+        "model_file": "vcg-tiny.safetensors"
+      },
+      "title": "本地权重检查"
+    },
+    {
+      "id": "n2",
+      "type": "text-output",
+      "x": 520,
+      "y": 160,
+      "params": {
+        "label": "权重元数据"
+      },
+      "title": "文本输出"
+    },
+    {
+      "id": "n3",
+      "type": "note",
+      "x": 120,
+      "y": 420,
+      "params": {
+        "text": "专业模式本地节点示例：先到「设置 → VCG 视觉控制生成器 → 本地工具与模型」安装 PyTorch 与 safetensors，再下载工作流声明的示例权重（可信源 GitHub，约 1KB），然后运行本工作流。节点会读取 safetensors 头部的张量名/dtype/形状/数量并输出文本，不联网、不产生 token。"
+      },
+      "title": "说明"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": {
+        "node": "n1",
+        "port": "text"
+      },
+      "to": {
+        "node": "n2",
+        "port": "text"
+      }
+    }
+  ],
+  "models": [
+    {
+      "name": "VCG 示例权重",
+      "filename": "vcg-tiny.safetensors",
+      "url": "https://github.com/Zymjason/DSH_VCG_repo/raw/main/assets/tiny-safetensors/vcg-tiny.safetensors",
+      "sha256": "fa2216793dde3860c83fdd207c4a67a5e60265d32f14fd9fc4ccfad49e12542d",
+      "size": 88,
+      "format": "safetensors",
+      "source": "github",
+      "license": "MIT",
+      "required": true
+    }
+  ]
+}

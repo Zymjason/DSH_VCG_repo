@@ -1,0 +1,208 @@
+name: audit-issue
+
+# CONTRACT §16.1：Issue 复核流程。
+# issue 模板引用节点/工作流 → 自动审计 → 复制到 recheck 分支 → 评论报告 + recheck:pending；
+# 人工 recheck:approved → 合并 recheck 到 main；recheck:rejected → 复制到 bug 分支。
+# 所有平台 API 调用都用 curl 完成（不依赖 marketplace action，checkout 除外）。
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: audit-issue-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    if: >-
+      github.event.action != 'labeled'
+      || github.event.label.name == 'recheck:approved'
+      || github.event.label.name == 'recheck:rejected'
+    runs-on: ubuntu-latest
+    env:
+      API: ${{ github.api_url }}
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+      EVENT_ACTION: ${{ github.event.action }}
+      EVENT_LABEL: ${{ github.event.label.name }}
+      TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Fetch all branches and tags
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+          git fetch --tags --force origin
+          git config user.name 'vcg-audit-bot'
+          git config user.email 'vcg-audit-bot@users.noreply.github.com'
+
+      - name: Run issue submission audit
+        id: audit
+        if: github.event.action != 'labeled'
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set +e
+          node scripts/audit-submission.mjs --allow-duplicates \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --author "$ISSUE_AUTHOR" --pr "$ISSUE_NUMBER" \
+            --json-out issue-report.json --md-out issue-comment.md > issue-console.txt 2>&1
+          CODE=$?
+          set -e
+          cat issue-console.txt || true
+          OK=$(node -e 'try{const r=require("./issue-report.json");process.stdout.write(r.ok?"true":"false")}catch(e){process.stdout.write("false")}' 2>/dev/null | tail -1)
+          FILES=$(node -e 'try{const r=require("./issue-report.json");process.stdout.write((r.declaration.files||[]).join(","))}catch(e){}' 2>/dev/null | tail -1)
+          echo "ok=${OK:-false}" >> "$GITHUB_OUTPUT"
+          echo "files=${FILES:-}" >> "$GITHUB_OUTPUT"
+          echo "exit=$CODE" >> "$GITHUB_OUTPUT"
+          [ -n "$OK" ] || echo "::warning::未生成 issue-report.json（见 issue-console.txt）"
+
+      - name: Post or update issue comment
+        if: steps.audit.outcome == 'success' && github.event.action != 'labeled'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: Bearer $TOKEN"
+              -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"
+              -H "User-Agent: vcg-audit-bot" -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          node -e 'const fs=require("fs");fs.writeFileSync("/tmp/comment.json",JSON.stringify({body:fs.readFileSync("issue-comment.md","utf8")}))'
+          CODE=$(api GET "/repos/$REPO/issues/$ISSUE_NUMBER/comments?per_page=100" "" /tmp/comments.json)
+          ID=''
+          if [ "$CODE" = "200" ]; then
+            ID=$(node -e '
+              const fs=require("fs");
+              const list=JSON.parse(fs.readFileSync("/tmp/comments.json","utf8"));
+              const hit=list.find((c)=>typeof c.body==="string" && c.body.includes("<!-- vcg-audit-report -->"));
+              process.stdout.write(hit?String(hit.id):"");
+            ')
+          fi
+          if [ -n "$ID" ]; then
+            CODE=$(api PATCH "/repos/$REPO/issues/comments/$ID" /tmp/comment.json)
+            [ "$CODE" = "200" ] || { cat /tmp/api.json; echo "::warning::更新审计评论失败 HTTP $CODE"; exit 0; }
+          else
+            CODE=$(api POST "/repos/$REPO/issues/$ISSUE_NUMBER/comments" /tmp/comment.json)
+            [ "$CODE" = "201" ] || { cat /tmp/api.json; echo "::warning::发表审计评论失败 HTTP $CODE"; exit 0; }
+          fi
+
+      - name: Set recheck:pending label
+        if: steps.audit.outcome == 'success' && github.event.action != 'labeled'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          export WANT_LABEL='recheck:pending' LABEL_COLOR='fbca04' LABEL_DESC='Issue 复核待人工处理'
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: Bearer $TOKEN"
+              -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"
+              -H "User-Agent: vcg-audit-bot" -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          api GET "/repos/$REPO/issues/$ISSUE_NUMBER/labels" "" /tmp/labels.json >/dev/null || true
+          node -e '
+            const fs=require("fs");
+            let current=[];
+            try { current=JSON.parse(fs.readFileSync("/tmp/labels.json","utf8")).map((l)=>l.name); } catch (e) { current=[]; }
+            const kept=current.filter((name)=>!name.startsWith("recheck:") || name==="recheck:approved" || name==="recheck:rejected");
+            fs.writeFileSync("/tmp/labels-put.json",JSON.stringify({labels:[...new Set([...kept,process.env.WANT_LABEL])]}));
+            fs.writeFileSync("/tmp/label-create.json",JSON.stringify({name:process.env.WANT_LABEL,color:process.env.LABEL_COLOR,description:process.env.LABEL_DESC}));
+          '
+          CODE=$(api PUT "/repos/$REPO/issues/$ISSUE_NUMBER/labels" /tmp/labels-put.json)
+          if [ "$CODE" -ge 300 ] 2>/dev/null; then
+            api POST "/repos/$REPO/labels" /tmp/label-create.json >/dev/null || true
+            CODE=$(api PUT "/repos/$REPO/issues/$ISSUE_NUMBER/labels" /tmp/labels-put.json)
+          fi
+          [ "$CODE" -lt 300 ] 2>/dev/null || { cat /tmp/api.json; echo "::warning::设置 recheck:pending 失败 HTTP $CODE"; }
+
+      - name: Copy referenced files to recheck branch
+        if: steps.audit.outcome == 'success' && github.event.action != 'labeled' && steps.audit.outputs.files != ''
+        run: |
+          set -euo pipefail
+          node scripts/route-branch.mjs --target recheck --files "${{ steps.audit.outputs.files }}" \
+            --ref auto --repo-root "$GITHUB_WORKSPACE" --remote origin \
+            --reason "issue #$ISSUE_NUMBER recheck submission" --json-out route-recheck.json \
+            || echo "::warning::复制到 recheck 分支失败（文件可能不存在或 token 只读，见 docs/review-policy.md）"
+
+      - name: recheck:approved -> merge recheck into main
+        if: github.event.action == 'labeled' && github.event.label.name == 'recheck:approved'
+        continue-on-error: true
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: Bearer $TOKEN"
+              -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"
+              -H "User-Agent: vcg-audit-bot" -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          comment() {
+            MSG="$1" node -e 'const fs=require("fs");fs.writeFileSync("/tmp/c.json",JSON.stringify({body:process.env.MSG}))'
+            api POST "/repos/$REPO/issues/$ISSUE_NUMBER/comments" /tmp/c.json >/dev/null 2>&1 || true
+          }
+          # 先确认 recheck 与 main 有差异
+          node -e 'const fs=require("fs");fs.writeFileSync("/tmp/merge.json",JSON.stringify({merge_method:"merge"}))'
+          node -e 'const fs=require("fs");fs.writeFileSync("/tmp/newmain.json",JSON.stringify({title:`chore: merge recheck into main (issue #${process.env.ISSUE_NUMBER})`,head:"recheck",base:"main",body:`由 recheck:approved 流程自动创建（来源 Issue #${process.env.ISSUE_NUMBER}）。`}))'
+          CODE=$(api POST "/repos/$REPO/pulls" /tmp/newmain.json)
+          if [ "$CODE" = "422" ]; then
+            comment "recheck 与 main 没有可合并的差异，无需合并。"; exit 0
+          fi
+          if [ "$CODE" != "201" ]; then
+            comment "创建 recheck→main 合并 PR 失败（HTTP $CODE）。请人工处理，见 docs/review-policy.md。"; cat /tmp/api.json; exit 1
+          fi
+          MAIN_PR=$(node -e 'const fs=require("fs");process.stdout.write(String(JSON.parse(fs.readFileSync("/tmp/api.json","utf8")).number))' 2>/dev/null | tail -1)
+          CODE=$(api PUT "/repos/$REPO/pulls/$MAIN_PR/merge" /tmp/merge.json)
+          if [ "$CODE" = "200" ]; then
+            RESULT="✅ recheck:approved：recheck 已合并到 main（合并 PR #$MAIN_PR）。"
+          else
+            RESULT="recheck→main 合并失败（HTTP $CODE）。请人工合并。"
+          fi
+          comment "$RESULT"
+          [ "$CODE" = "200" ] || { cat /tmp/api.json; exit 1; }
+
+      - name: recheck:rejected -> copy to bug
+        if: github.event.action == 'labeled' && github.event.label.name == 'recheck:rejected'
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+          api() {
+            local method="$1" route="$2" data="${3:-}" out="${4:-/tmp/api.json}"
+            local args=(-sS -X "$method" -H "Authorization: Bearer $TOKEN"
+              -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"
+              -H "User-Agent: vcg-audit-bot" -o "$out" -w "%{http_code}")
+            if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
+            curl "${args[@]}" "$API$route"
+          }
+          node scripts/audit-submission.mjs --allow-duplicates --repo-root "$GITHUB_WORKSPACE" --author "$ISSUE_AUTHOR" \
+            --json-out issue-report.json >/dev/null 2>&1 || true
+          FILES=$(node -e 'try{const r=require("./issue-report.json");process.stdout.write((r.declaration.files||[]).join(","))}catch(e){}' 2>/dev/null | tail -1)
+          if [ -n "$FILES" ]; then
+            node scripts/route-branch.mjs --target bug --files "$FILES" --ref auto \
+              --repo-root "$GITHUB_WORKSPACE" --remote origin \
+              --reason "recheck:rejected for issue #$ISSUE_NUMBER" --json-out route-bug.json \
+              || echo "::warning::复制到 bug 分支失败"
+          fi
+          export MSG="人工复核未通过（recheck:rejected）：引用文件已复制到 bug 分支。"
+          node -e 'const fs=require("fs");fs.writeFileSync("/tmp/c.json",JSON.stringify({body:process.env.MSG}))'
+          api POST "/repos/$REPO/issues/$ISSUE_NUMBER/comments" /tmp/c.json >/dev/null || true

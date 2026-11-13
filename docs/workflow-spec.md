@@ -23,6 +23,8 @@
 | `viewport` | object | ✅ | `{ x, y, scale }`，画布平移 / 缩放（`scale > 0`） |
 | `nodes` | array | ✅ | 节点实例，至少一个 |
 | `edges` | array | ✅ | 连线，可为 `[]` |
+| `zones` | array | 可选 | 画布分区（视觉分组，不参与执行），见插件 CONTRACT §14.1 |
+| `models` | array | 可选 | 推荐模型下载声明（字段同 `docs/node-spec.md` §12），见下 |
 
 ## 3. 节点实例
 
@@ -178,3 +180,26 @@
 - `getCanvas` 返回 `{workflow, updatedAt}`；无历史时返回内置 `txt2img` 作为 fallback。
 - 运行结果、选中节点、缩放以外的临时 UI 状态不写入持久化 JSON。
 - 节点坐标允许负值；画布 `fit` 时以节点包围盒为准。
+
+
+---
+
+## 8. 推荐模型声明（`models`，可选）
+
+工作流可在顶层声明整条流程推荐/需要的权重文件，字段与节点定义 `models` 完全一致（见 `docs/node-spec.md` §12）：
+
+```json
+"models": [
+  {
+    "name": "VCG 示例权重",
+    "filename": "vcg-tiny.safetensors",
+    "url": "https://github.com/Zymjason/DSH_VCG_repo/raw/main/assets/tiny-safetensors/vcg-tiny.safetensors",
+    "sha256": "…",
+    "size": 88,
+    "format": "safetensors",
+    "required": true
+  }
+]
+```
+
+客户端在打开工作流或运行前会汇总节点级 + 工作流级 `models`，展示下载入口与可信源状态；来自非可信主机的下载需二次确认。`models` 不参与图校验与执行，可安全省略。示例见 `workflows/local-inspect.json`。

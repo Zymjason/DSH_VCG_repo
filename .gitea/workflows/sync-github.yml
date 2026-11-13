@@ -1,0 +1,54 @@
+name: sync-github
+
+# CONTRACT §16.2（Gitea Actions 等价实现）：每天 22:00 Asia/Shanghai
+# （cron 0 14 * * * UTC）把 Gitea 仓库的所有分支与 tag 同步到 GitHub
+# （Gitea → GitHub），使用 secrets.GH_TOKEN（GitHub PAT，repo 权限）。
+# 同步逻辑在 scripts/sync-mirrors.mjs：目标缺失或落后才 push --force-with-lease。
+
+on:
+  schedule:
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-github
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Mirror Gitea to GitHub (all branches + tags)
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Gitea 实例较旧时可能不支持 vars，可直接把下面三个默认值改成实际值
+          GH_OWNER: ${{ vars.GH_OWNER }}
+          GH_REPO: ${{ vars.GH_REPO }}
+          GITEA_USER: ${{ vars.GITEA_USER }}
+          GITEA_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          GH_OWNER="${GH_OWNER:-ZymJason}"
+          GH_REPO="${GH_REPO:-DSH_VCG_repo}"
+          GUSER="${GITEA_USER:-${GITHUB_REPOSITORY_OWNER:-ZymJason_DSH}}"
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::缺少 secrets.GH_TOKEN。请到仓库 Settings → Secrets 添加 GitHub PAT（repo 权限，见 docs/review-policy.md）。"
+            exit 1
+          fi
+          SERVER_HOST="${GITHUB_SERVER_URL#https://}"
+          SOURCE_URL="https://${GUSER}:${GITEA_TOKEN}@${SERVER_HOST}/${GITHUB_REPOSITORY}.git"
+          TARGET_URL="https://x-access-token:${GH_TOKEN}@github.com/${GH_OWNER}/${GH_REPO}.git"
+          node scripts/sync-mirrors.mjs \
+            --source "$SOURCE_URL" \
+            --target "$TARGET_URL" \
+            --json-out sync-report.json
+          echo "同步报告已生成: sync-report.json（摘要见上方日志）"

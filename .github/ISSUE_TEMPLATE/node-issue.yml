@@ -1,0 +1,64 @@
+name: 节点/工作流复核申请
+description: 申请复核 bug 分支或未审核分支上的节点/工作流（Issue 审计 → recheck 分支）
+title: '[复核] <节点或工作流 id>'
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请阅读 [docs/review-policy.md](../blob/main/docs/review-policy.md)。
+        本模板正文会被 CI 解析：`### 提交类型` / `### 被引用节点/工作流文件` /
+        `### 提交者` / `### 重新提交旧 PR（可选）`。
+        CI 会审计引用文件、把文件复制到 `recheck` 分支、评论报告并打 `recheck:pending`。
+        人工处理后：`recheck:approved` → 合并 main；`recheck:rejected` → 复制到 bug 分支。
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 提交类型
+      description: 被复核的是节点（nodes/*.json）还是工作流（workflows/*.json）
+      options:
+        - node
+        - workflow
+    validations:
+      required: true
+
+  - type: input
+    id: file
+    attributes:
+      label: 被引用节点/工作流文件
+      description: 仓库内路径，只能 1 个文件，例如 nodes/my-node.json 或 workflows/my-flow.json
+      placeholder: nodes/my-node.json
+    validations:
+      required: true
+
+  - type: input
+    id: submitter
+    attributes:
+      label: 提交者
+      description: 你的平台用户名（必须与 Issue 作者一致，可带 @）
+      placeholder: '@your-login'
+    validations:
+      required: true
+
+  - type: input
+    id: supersedes
+    attributes:
+      label: 重新提交旧 PR（可选）
+      description: 如 #12；留空或填 “无” 表示不是重新提交
+      placeholder: '#12'
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: 复核原因
+      description: 说明为什么该节点/工作流应当通过复核（修复了什么、测试结果等）
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: security
+    attributes:
+      label: 安全声明
+      options:
+        - label: 我确认引用的节点/工作流不含恶意代码或不可信模型下载，且模型声明可核验
+          required: true

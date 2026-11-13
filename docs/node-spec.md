@@ -32,6 +32,7 @@
 | `cloud` | object | ✅ | 云端能力声明，见 §7 |
 | `local` | object | 可选 | 本地 ComfyUI 映射，见 §8 |
 | `ui` | object | ✅ | `{ accent: "#rrggbb", width: number }` |
+| `models` | array | 可选 | 推荐模型下载声明，见 §12 |
 
 `engine` 的语义：
 
@@ -285,3 +286,40 @@ JSONPath 仅支持 `$.a.b`、`$.a[*].b` 两种形式；取到的数组按图片 
 - `manifest.json` 的 `version` 为仓库版本（语义化版本），`minPluginVersion` 为可加载本仓库的最低插件版本。
 - 新增节点 / 工作流属于小版本；修改既有节点 `id`、端口名、参数名属于破坏性变更，必须同步 bump 主版本，并同步更新插件内置副本与本文档。
 - 插件按 `manifest.nodes` / `manifest.workflows` 校验拉取完整性；清单与文件不一致的仓库视为无效包。
+
+
+---
+
+## 12. 推荐模型声明（`models`，可选）
+
+本地执行节点（尤其 `engine: "local"` / `executor.kind: "local"`）可在节点 JSON 中声明运行所需或推荐的权重文件，客户端据此显示下载入口、大小、可信源状态：
+
+```json
+"models": [
+  {
+    "name": "VCG 示例权重",
+    "filename": "vcg-tiny.safetensors",
+    "url": "https://github.com/Zymjason/DSH_VCG_repo/raw/main/assets/tiny-safetensors/vcg-tiny.safetensors",
+    "sha256": "64 位 hex（可选但强烈建议）",
+    "size": 88,
+    "format": "safetensors",
+    "source": "github",
+    "license": "MIT",
+    "required": false
+  }
+]
+```
+
+| 字段 | 必需 | 规则 |
+|---|---|---|
+| `name` | 建议 | 显示名；缺省用 `filename` |
+| `filename` | ✅ | 保存到模型目录的文件名，只允许 `A-Z a-z 0-9 . _ -`，禁止路径分隔符与 `..` |
+| `url` | ✅ | 必须是 http(s)；非 https 会标记不安全并给出警告（不阻止上传） |
+| `format` | ✅ | `safetensors` `ckpt` `pt` `pth` `bin` `gguf` |
+| `sha256` | 建议 | 64 位 hex；缺失时审计给 warning |
+| `size` | 建议 | 字节数；下载后校验 |
+| `source` | 可选 | 来源标识（如 huggingface/modelscope/civitai/github/other） |
+| `license` | 可选 | 权重许可证 |
+| `required` | 可选 | `true` 表示运行该节点前必须下载 |
+
+下载前客户端会拿 URL 主机与仓库根目录 `trusted-sources.json` 比对；**非可信源会弹窗警告并要求二次确认**，不影响节点/工作流上传（审计仅 warning）。审计规则见 `docs/review-policy.md`，可信源清单由维护者审核更新。
