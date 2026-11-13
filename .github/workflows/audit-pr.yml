@@ -37,6 +37,7 @@ jobs:
       BASE_REF: ${{ github.event.pull_request.base.ref }}
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
       EVENT_ACTION: ${{ github.event.action }}
       EVENT_LABEL: ${{ github.event.label.name }}
       TOKEN: ${{ github.token }}
@@ -64,18 +65,21 @@ jobs:
           set -euo pipefail
           AUDIT='scripts/audit-submission.mjs'
           ROUTE='scripts/route-branch.mjs'
+          UPDATER='scripts/update-manifest.mjs'
           TRUSTED='trusted-sources.json'
           rm -rf /tmp/vcg-base
           if git worktree add --detach /tmp/vcg-base "$BASE_SHA" >/dev/null 2>&1; then
             if [ -f /tmp/vcg-base/scripts/audit-submission.mjs ]; then
               AUDIT='/tmp/vcg-base/scripts/audit-submission.mjs'
               [ -f /tmp/vcg-base/scripts/route-branch.mjs ] && ROUTE='/tmp/vcg-base/scripts/route-branch.mjs'
+              [ -f /tmp/vcg-base/scripts/update-manifest.mjs ] && UPDATER='/tmp/vcg-base/scripts/update-manifest.mjs'
               [ -f /tmp/vcg-base/trusted-sources.json ] && TRUSTED='/tmp/vcg-base/trusted-sources.json'
             fi
           fi
           {
             echo "audit=$AUDIT"
             echo "route=$ROUTE"
+            echo "updater=$UPDATER"
             echo "trusted=$TRUSTED"
           } >> "$GITHUB_OUTPUT"
 
@@ -86,7 +90,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set +e
-          FILES=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" | paste -sd, -)
+          FILES=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- nodes workflows | paste -sd, -)
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           node "${{ steps.scripts.outputs.audit }}" \
             --files "$FILES" \
@@ -101,6 +105,27 @@ jobs:
           echo "ok=${OK:-false}" >> "$GITHUB_OUTPUT"
           echo "exit=$CODE" >> "$GITHUB_OUTPUT"
           [ -n "$OK" ] || echo "::warning::未生成 audit-report.json（见 audit-console.txt）"
+
+      # 审计通过后自动登记 manifest（新节点/工作流 id），避免人工改清单；
+      # 只对同仓库分支生效（fork PR 只读 token 无法推送）。
+      - name: Register submitted node or workflow in manifest
+        if: >-
+          steps.audit.outcome == 'success' && steps.audit.outputs.ok == 'true'
+          && github.event.action != 'labeled'
+          && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          node "${{ steps.scripts.outputs.updater }}" --repo-root "$GITHUB_WORKSPACE"
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo "::notice::manifest.json 无需变更"
+            exit 0
+          fi
+          git commit -m "chore(manifest): 自动登记本次提交的节点/工作流"
+          git push origin "HEAD:${HEAD_REF}" || {
+            echo "::warning::推送 manifest 更新失败（fork PR 或分支保护），请维护者合并后手动运行 node scripts/update-manifest.mjs"
+          }
 
       - name: Post or update audit comment
         if: steps.audit.outcome == 'success' && github.event.action != 'labeled'
@@ -312,7 +337,7 @@ jobs:
             if [ -n "$data" ]; then args+=(-H "Content-Type: application/json" --data-binary "@$data"); fi
             curl "${args[@]}" "$API$route"
           }
-          FILES=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" | paste -sd, -)
+          FILES=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- nodes workflows | paste -sd, -)
           ROUTE="${{ steps.scripts.outputs.route }}"
           if [ -n "$FILES" ]; then
             node "$ROUTE" --target bug --files "$FILES" --ref "$HEAD_SHA" \

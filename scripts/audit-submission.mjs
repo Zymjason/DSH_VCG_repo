@@ -635,6 +635,8 @@ async function main() {
   // 实际变更文件：--files / env；若都没有则用正文声明
   let actualFiles = parsed.files.length > 0 ? parsed.files : splitList(env.AUDIT_FILES || '')
   actualFiles = [...new Set(actualFiles.map(normalizeRepoPath).filter(Boolean))]
+  // manifest.json 由 CI 在审计通过后自动登记，不属于投稿文件声明范围。
+  actualFiles = actualFiles.filter((file) => file !== 'manifest.json')
   const declaredFiles = [...new Set(declaration.files.map(normalizeRepoPath).filter(Boolean))]
   const filesToAudit = actualFiles.length > 0 ? actualFiles : declaredFiles
 

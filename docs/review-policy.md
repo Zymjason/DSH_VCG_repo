@@ -74,12 +74,13 @@ CI 只维护 `audit:*` / `recheck:pending`，不会清除人工的 `status:*` / 
    - 跨分支重复检测（对比 `main`/`dev`/`bug`/`recheck` 的 id、文件名、内容 sha256；普通 PR 与 `main`/`dev` **内容完全相同**即 error；同 id/文件名但内容不同视为更新、仅 warning 交人工审查；`bug`/`recheck` 留档命中仅 warning）；
    - `models[]` 声明安全审计（见 §6）；
    - 评论 Markdown 报告；打 `audit:passed` 或 `audit:failed`。
-3. **审计失败**：文件复制到 `bug` 分支，PR 保持打开。投稿者修正后在同一 PR push 新提交，
+3. **审计通过自动登记 manifest**：CI 会把本次提交的节点/工作流 id 追加到 `manifest.json` 并提交回 PR 分支（仅同仓库分支；fork 需维护者合并后运行 `node scripts/update-manifest.mjs`）。
+4. **审计失败**：文件复制到 `bug` 分支，PR 保持打开。投稿者修正后在同一 PR push 新提交，
    `synchronize` 事件会重新审计并覆盖评论。
-4. **人工审查**：
+5. **人工审查**：
    - 通过 → 打 `status:approved`：CI 先把 PR 合入 `dev`，再创建/复用 `dev → main` PR 合并到 `main`；
    - 拒绝 → 打 `status:rejected`：CI 评论并复制文件到 `bug`，**不自动关闭 PR**。
-5. **重新提交（supersedes）**：新 PR 正文写 `supersedes: #N`。
+6. **重新提交（supersedes）**：新 PR 正文写 `supersedes: #N`。
    CI 校验 `#N` 与新 PR **作者相同**且 **未合并、仍 open**；通过后在旧 PR 评论并关闭旧 PR，
    新 PR 正常重新审计。校验不通过会在新 PR 评论说明原因（不会误关旧 PR）。
    注意：审计失败的文件会留档 `bug`，但 `bug`/`recheck` 命中重复只提示不阻断，因此修正后

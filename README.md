@@ -30,6 +30,7 @@ DSH_VCG_repo/
 │   ├── validate.mjs          零依赖校验器（node scripts/validate.mjs）
 │   ├── audit-submission.mjs  PR/Issue 提交审计（类型/规范/重复/模型来源）
 │   ├── route-branch.mjs      按审计结果移动文件到 dev/bug/recheck
+│   ├── update-manifest.mjs   审计通过后自动登记 manifest（节点/工作流 id）
 │   └── sync-mirrors.mjs      GitHub ↔ Gitea 全分支/tag 镜像同步
 ├── .github/workflows/        PR/Issue 审计 + 每日 22:00（北京）镜像同步
 └── .gitea/workflows/         Gitea Actions 等价自动化
